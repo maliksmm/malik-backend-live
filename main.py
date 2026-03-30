@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests, threading, time, smtplib, random
@@ -11,9 +12,9 @@ PANELS = {
     2: {"url": "https://secsers.com/api/v2", "key": "831913f4125f0576233bb032555d147c", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
 }
 
-# ⚠️ OTP BHEJNE KE LIYE APNA EMAIL AUR APP PASSWORD YAHAN DAALEIN
-ADMIN_EMAIL = "your_email@gmail.com" 
-ADMIN_APP_PASS = "your_16_digit_app_password"
+# ⚠️ OTP BHEJNE KE LIYE EMAIL AUR PASSWORD SET KAR DIYA HAI
+ADMIN_EMAIL = "aryanmalik888807@gmail.com" 
+ADMIN_APP_PASS = "aryan_7611"
 
 user_balances = {1: {}, 2: {}} 
 transactions_db = []
