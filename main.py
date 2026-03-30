@@ -1,7 +1,6 @@
+import json, os, threading, time, requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import requests, threading, time, smtplib, random, json, os
-from email.mime.text import MIMEText
 
 app = Flask(__name__)
 CORS(app)
@@ -11,22 +10,19 @@ PANELS = {
     "2": {"url": "https://secsers.com/api/v2", "key": "831913f4125f0576233bb032555d147c", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
 }
 
-ADMIN_EMAIL = "aryanmalik888807@gmail.com" 
-ADMIN_APP_PASS = "aryan_7611" # Bhai, yahan 16-digit App Password dalega tabhi mail jayega!
-
-DB_FILE = 'database.json'
-
-# 💾 STRONG METHOD: Data Save Karne Ka System
+# 💾 STRONG PERMANENT DATABASE (Ab Data Kabhi Delete Nahi Hoga)
+DB_FILE = "malik_db.json"
 def load_db():
     if os.path.exists(DB_FILE):
-        with open(DB_FILE, 'r') as f: return json.load(f)
+        try:
+            with open(DB_FILE, "r") as f: return json.load(f)
+        except: pass
     return {"users": {"1": {}, "2": {}}, "balances": {"1": {}, "2": {}}, "txns": [], "orders": [], "blocked": {"1": [], "2": []}}
 
-def save_db():
-    with open(DB_FILE, 'w') as f: json.dump(db, f)
-
 db = load_db()
-otp_db = {}
+
+def save_db():
+    with open(DB_FILE, "w") as f: json.dump(db, f)
 
 def poll_telegram(p_id):
     bot_token = PANELS[p_id]["bot"]
@@ -37,6 +33,7 @@ def poll_telegram(p_id):
             for update in res.get('result', []):
                 offset = update['update_id'] + 1
                 
+                # 🛡️ BOT ADMIN COMMAND: /users (AB 100% CHALEGA)
                 if 'message' in update and 'text' in update['message']:
                     msg_text = update['message']['text']
                     chat_id = update['message']['chat']['id']
@@ -44,14 +41,12 @@ def poll_telegram(p_id):
                         if not db['users'][p_id]:
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "No users found."})
                         else:
-                            total = len(db['users'][p_id])
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"👥 Total Users: {total}"})
                             for u_name, u_details in db['users'][p_id].items():
                                 em = u_details['email']
                                 bal = db['balances'][p_id].get(em, 0.0)
                                 stat = "🚫 BLOCKED" if em in db['blocked'][p_id] else "✅ ACTIVE"
                                 markup = {"inline_keyboard": [[{"text": f"🚫 BLOCK {u_name}", "callback_data": f"blkusr_{em}"}]]}
-                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"👤 User: {u_name}\n✉️ {em}\n💰 Bal: ₹{bal}\n📊 {stat}", "reply_markup": markup})
+                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"👤 User: {u_name}\n✉️ Email: {em}\n💰 Bal: ₹{bal}\n📊 Status: {stat}", "reply_markup": markup})
 
                 if 'callback_query' in update:
                     data = update['callback_query']['data']
@@ -96,7 +91,7 @@ threading.Thread(target=poll_telegram, args=("2",), daemon=True).start()
 @app.route("/api/signup", methods=["POST"])
 def signup():
     d = request.json
-    p_id, user, email, pwd = str(d['panel']), d['username'], d['email'], d['pass']
+    p_id, user, email, pwd = str(d['panel']), d['username'].lower().strip(), d['email'].lower().strip(), d['pass']
     if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
     if user in db['users'][p_id] or any(u['email'] == email for u in db['users'][p_id].values()): return jsonify({"error": "Username or Email already exists!"}), 400
     db['users'][p_id][user] = {"email": email, "password": pwd}
@@ -108,50 +103,34 @@ def signup():
 @app.route("/api/login", methods=["POST"])
 def login():
     d = request.json
-    p_id, user, pwd = str(d['panel']), d['username'], d['pass']
+    p_id, user, pwd = str(d['panel']), d['username'].lower().strip(), d['pass']
     if user not in db['users'][p_id] or db['users'][p_id][user]["password"] != pwd:
         return jsonify({"error": "Invalid Username or Password!"}), 400
     email = db['users'][p_id][user]["email"]
     if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
     return jsonify({"status": "success", "email": email})
 
-@app.route("/api/forgot-password", methods=["POST"])
-def forgot_password():
-    email = request.json['email']
-    user_found = False
-    for pid in ["1", "2"]:
-        for u, d in db['users'][pid].items():
-            if d['email'] == email: user_found = True
-    if not user_found: return jsonify({"error": "Email not found!"}), 400
-    
-    otp = str(random.randint(1000, 9999))
-    otp_db[email] = otp
-    try:
-        msg = MIMEText(f"Your MALIK VIP HUB Password Reset OTP is: {otp}")
-        msg['Subject'] = 'Password Reset OTP'
-        msg['From'] = ADMIN_EMAIL
-        msg['To'] = email
-        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
-        server.login(ADMIN_EMAIL, ADMIN_APP_PASS)
-        server.sendmail(ADMIN_EMAIL, email, msg.as_string())
-        server.quit()
-        return jsonify({"status": "success"})
-    except Exception as e:
-        print("SMTP ERROR:", e)
-        return jsonify({"error": "Failed to send OTP. Admin needs App Password."}), 500
-
-@app.route("/api/reset-password", methods=["POST"])
-def reset_password():
+# 🟢 GOOGLE AUTH ROUTE (OTP KI JAGAH)
+@app.route("/api/google-auth", methods=["POST"])
+def google_auth():
     d = request.json
-    email, otp, new_pass = d['email'], d['otp'], d['new_pass']
-    if otp_db.get(email) != otp: return jsonify({"error": "Invalid OTP!"}), 400
-    for pid in ["1", "2"]:
-        for u, details in db['users'][pid].items():
-            if details['email'] == email:
-                db['users'][pid][u]['password'] = new_pass
-                save_db()
-                return jsonify({"status": "success"})
-    return jsonify({"error": "Error resetting password."}), 400
+    p_id, email = str(d['panel']), d['email'].lower().strip()
+    if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
+    
+    # Agar purana user hai toh direct login
+    for u, details in db['users'][p_id].items():
+        if details['email'] == email:
+            return jsonify({"status": "success", "email": email, "username": u})
+            
+    # Agar naya user hai toh account bana do
+    username = email.split('@')[0]
+    # Agar username pehle se hai toh random number jod do
+    if username in db['users'][p_id]: username += str(int(time.time()))[-4:]
+    db['users'][p_id][username] = {"email": email, "password": "GoogleLogin"}
+    save_db()
+    msg = f"👤 *NEW GOOGLE SIGNUP (P{p_id})*\nName: {username}\nEmail: {email}"
+    requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg, "parse_mode": "Markdown"})
+    return jsonify({"status": "success", "email": email, "username": username})
 
 @app.route("/api/get-services", methods=["POST"])
 def get_services():
@@ -167,14 +146,14 @@ def add_funds():
     db['txns'].append({"status": "Pending", "email": email, "panel": p_id, "amount": amt, "utr": utr})
     save_db()
     text = f"🚨 *FUND REQUEST*\n👤 {email}\n💰 ₹{amt}\n🧾 UTR: {utr}\nPanel: {p_id}"
-    markup = {"inline_keyboard": [[{"text": "✅ APPROVE", "callback_data": f"app_{utr}"}, {"text": "❌ REJECT", "callback_data": f"rej_{utr}"}]]}
+    markup = {"inline_keyboard": [[{"text": "✅ APPROVE", "callback_data": f"app_{utr}"}, {"text": "❌ REJECT", "callback_data": f"rej_{utr}"}], [{"text": "🚫 BLOCK & DELETE USER", "callback_data": f"blk_{utr}"}]]}
     requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": text, "parse_mode": "Markdown", "reply_markup": markup})
     return jsonify({"status": "success"})
 
 @app.route("/api/place-order", methods=["POST"])
 def place_order():
     d = request.json
-    p_id, email, user, s_id, s_name, link, qty, charge = str(d['panel']), d['email'], d['username'], str(d['service']), d['service_name'], d['link'], int(d['qty']), float(d['charge'])
+    p_id, email, user, s_id, s_name, link, qty, charge = str(d['panel']), d['email'], d['username'], d['service'], d['service_name'], d['link'], int(d['qty']), float(d['charge'])
     if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
     if db['balances'][p_id].get(email, 0.0) < charge: return jsonify({"error": "Insufficient Wallet Balance!"}), 400
     
@@ -185,7 +164,7 @@ def place_order():
     order_id = res.get("order")
     db['orders'].append({"email": email, "panel": p_id, "id": order_id, "name": s_name, "qty": qty, "charge": charge, "status": "Pending", "refunded": False, "username": user})
     save_db()
-    msg = f"📦 *ORDER RECEIVED (P{p_id})*\n👤 {user}\n🛒 {s_name}\n🔢 Qty: {qty}\n💸 Amt: ₹{charge}"
+    msg = f"📦 *ORDER RECEIVED (P{p_id})*\n👤 Username: {user}\n🛒 Service: {s_name}\n🆔 ID: {s_id}\n🔢 Qty: {qty}\n💸 Amt: ₹{charge}"
     requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg, "parse_mode": "Markdown"})
     return jsonify({"status": "success", "order": order_id})
 
@@ -195,7 +174,6 @@ def sync():
     if email in db['blocked'][p_id]: return jsonify({"status": "blocked"}), 403
         
     user_orders = [o for o in db['orders'] if o['email'] == email and o['panel'] == p_id]
-    changed = False
     if len(user_orders) > 0:
         order_ids = ",".join([str(o['id']) for o in user_orders])
         try:
@@ -205,25 +183,25 @@ def sync():
                 if oid in res and type(res[oid]) == dict:
                     real_status = res[oid].get("status", o['status'])
                     
+                    # 🔔 STRONG NOTIFICATION FOR COMPLETE / CANCEL
                     if real_status.lower() != o['status'].lower():
                         if real_status.lower() in ['completed', 'canceled', 'cancelled', 'partial']:
-                            msg = f"🔔 *ORDER {real_status.upper()} (P{p_id})*\n👤 {o['username']}\n🛒 {o['name']}\n🆔 {oid}"
+                            msg = f"🔔 *ORDER {real_status.upper()} (P{p_id})*\n👤 User: {o['username']}\n🛒 Service: {o['name']}\n🆔 Order ID: {oid}\n📊 Qty: {o['qty']}"
                             requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg, "parse_mode": "Markdown"})
-                        changed = True
-                        
+                    
                     o['status'] = real_status
                     if real_status.lower() in ['canceled', 'cancelled'] and not o['refunded']:
                         db['balances'][p_id][email] = db['balances'][p_id].get(email, 0.0) + o['charge']
                         o['refunded'] = True
-                        changed = True
+                        save_db()
                     elif real_status.lower() == 'partial' and not o['refunded']:
                         remains = float(res[oid].get("remains", 0))
                         if remains > 0:
-                            db['balances'][p_id][email] = db['balances'][p_id].get(email, 0.0) + ((remains / float(o['qty'])) * o['charge'])
+                            refund_amt = (remains / float(o['qty'])) * o['charge']
+                            db['balances'][p_id][email] = db['balances'][p_id].get(email, 0.0) + refund_amt
                         o['refunded'] = True
-                        changed = True
+                        save_db()
         except: pass
-    if changed: save_db()
 
     user_txns = [t for t in db['txns'] if t['email'] == email and t['panel'] == p_id]
     return jsonify({"balance": db['balances'][p_id].get(email, 0.0), "txns": user_txns, "orders": user_orders})
