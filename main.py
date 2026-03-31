@@ -10,7 +10,7 @@ PANELS = {
     "2": {"url": "https://secsers.com/api/v2", "key": "831913f4125f0576233bb032555d147c", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
 }
 
-# 💾 STRONG PERMANENT DATABASE (Ab Data Kabhi Delete Nahi Hoga)
+# 💾 STRONG PERMANENT DATABASE
 DB_FILE = "malik_db.json"
 def load_db():
     if os.path.exists(DB_FILE):
@@ -24,6 +24,40 @@ db = load_db()
 def save_db():
     with open(DB_FILE, "w") as f: json.dump(db, f)
 
+# 🚀 STRONG METHOD: Background Order Checker (For Bot Messages & Refunds)
+def background_order_sync():
+    while True:
+        time.sleep(30) # Har 30 second me check karega
+        for p_id in ["1", "2"]:
+            pending_orders = [o for o in db['orders'] if o['panel'] == p_id and o['status'].lower() not in ['completed', 'canceled', 'cancelled', 'partial']]
+            if pending_orders:
+                order_ids = ",".join([str(o['id']) for o in pending_orders])
+                try:
+                    res = requests.post(PANELS[p_id]["url"], data={"key": PANELS[p_id]["key"], "action": "status", "orders": order_ids}).json()
+                    for o in pending_orders:
+                        oid = str(o['id'])
+                        if oid in res and type(res[oid]) == dict:
+                            real_status = res[oid].get("status", o['status'])
+                            if real_status.lower() != o['status'].lower():
+                                if real_status.lower() in ['completed', 'canceled', 'cancelled', 'partial']:
+                                    msg = f"🔔 *ORDER {real_status.upper()} (P{p_id})*\n👤 User: {o['username']}\n🛒 Service: {o['name']}\n🆔 Order ID: {oid}\n📊 Qty: {o['qty']}"
+                                    requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg, "parse_mode": "Markdown"})
+                                    
+                                    o['status'] = real_status
+                                    if real_status.lower() in ['canceled', 'cancelled'] and not o['refunded']:
+                                        db['balances'][p_id][o['email']] = db['balances'][p_id].get(o['email'], 0.0) + o['charge']
+                                        o['refunded'] = True
+                                    elif real_status.lower() == 'partial' and not o['refunded']:
+                                        remains = float(res[oid].get("remains", 0))
+                                        if remains > 0:
+                                            refund_amt = (remains / float(o['qty'])) * o['charge']
+                                            db['balances'][p_id][o['email']] = db['balances'][p_id].get(o['email'], 0.0) + refund_amt
+                                        o['refunded'] = True
+                                    save_db()
+                except: pass
+
+threading.Thread(target=background_order_sync, daemon=True).start()
+
 def poll_telegram(p_id):
     bot_token = PANELS[p_id]["bot"]
     offset = 0
@@ -33,14 +67,15 @@ def poll_telegram(p_id):
             for update in res.get('result', []):
                 offset = update['update_id'] + 1
                 
-                # 🛡️ BOT ADMIN COMMAND: /users (AB 100% CHALEGA)
+                # 🛡️ BOT ADMIN COMMAND: /users (WITH TOTAL USERS FIX)
                 if 'message' in update and 'text' in update['message']:
                     msg_text = update['message']['text']
                     chat_id = update['message']['chat']['id']
                     if msg_text == '/users':
-                        if not db['users'][p_id]:
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "No users found."})
-                        else:
+                        total_users = len(db['users'][p_id])
+                        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"👥 *TOTAL USERS ON PANEL {p_id}: {total_users}*", "parse_mode": "Markdown"})
+                        
+                        if total_users > 0:
                             for u_name, u_details in db['users'][p_id].items():
                                 em = u_details['email']
                                 bal = db['balances'][p_id].get(em, 0.0)
@@ -110,25 +145,21 @@ def login():
     if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
     return jsonify({"status": "success", "email": email})
 
-# 🟢 GOOGLE AUTH ROUTE (OTP KI JAGAH)
 @app.route("/api/google-auth", methods=["POST"])
 def google_auth():
     d = request.json
     p_id, email = str(d['panel']), d['email'].lower().strip()
     if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
     
-    # Agar purana user hai toh direct login
     for u, details in db['users'][p_id].items():
         if details['email'] == email:
             return jsonify({"status": "success", "email": email, "username": u})
             
-    # Agar naya user hai toh account bana do
     username = email.split('@')[0]
-    # Agar username pehle se hai toh random number jod do
     if username in db['users'][p_id]: username += str(int(time.time()))[-4:]
     db['users'][p_id][username] = {"email": email, "password": "GoogleLogin"}
     save_db()
-    msg = f"👤 *NEW GOOGLE SIGNUP (P{p_id})*\nName: {username}\nEmail: {email}"
+    msg = f"👤 *NEW GOOGLE LOGIN (P{p_id})*\nName: {username}\nEmail: {email}"
     requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg, "parse_mode": "Markdown"})
     return jsonify({"status": "success", "email": email, "username": username})
 
@@ -172,37 +203,7 @@ def place_order():
 def sync():
     email, p_id = request.json['email'], str(request.json['panel'])
     if email in db['blocked'][p_id]: return jsonify({"status": "blocked"}), 403
-        
     user_orders = [o for o in db['orders'] if o['email'] == email and o['panel'] == p_id]
-    if len(user_orders) > 0:
-        order_ids = ",".join([str(o['id']) for o in user_orders])
-        try:
-            res = requests.post(PANELS[p_id]["url"], data={"key": PANELS[p_id]["key"], "action": "status", "orders": order_ids}).json()
-            for o in user_orders:
-                oid = str(o['id'])
-                if oid in res and type(res[oid]) == dict:
-                    real_status = res[oid].get("status", o['status'])
-                    
-                    # 🔔 STRONG NOTIFICATION FOR COMPLETE / CANCEL
-                    if real_status.lower() != o['status'].lower():
-                        if real_status.lower() in ['completed', 'canceled', 'cancelled', 'partial']:
-                            msg = f"🔔 *ORDER {real_status.upper()} (P{p_id})*\n👤 User: {o['username']}\n🛒 Service: {o['name']}\n🆔 Order ID: {oid}\n📊 Qty: {o['qty']}"
-                            requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg, "parse_mode": "Markdown"})
-                    
-                    o['status'] = real_status
-                    if real_status.lower() in ['canceled', 'cancelled'] and not o['refunded']:
-                        db['balances'][p_id][email] = db['balances'][p_id].get(email, 0.0) + o['charge']
-                        o['refunded'] = True
-                        save_db()
-                    elif real_status.lower() == 'partial' and not o['refunded']:
-                        remains = float(res[oid].get("remains", 0))
-                        if remains > 0:
-                            refund_amt = (remains / float(o['qty'])) * o['charge']
-                            db['balances'][p_id][email] = db['balances'][p_id].get(email, 0.0) + refund_amt
-                        o['refunded'] = True
-                        save_db()
-        except: pass
-
     user_txns = [t for t in db['txns'] if t['email'] == email and t['panel'] == p_id]
     return jsonify({"balance": db['balances'][p_id].get(email, 0.0), "txns": user_txns, "orders": user_orders})
 
