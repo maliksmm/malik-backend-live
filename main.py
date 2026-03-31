@@ -23,7 +23,6 @@ db = load_db()
 def save_db():
     with open(DB_FILE, "w") as f: json.dump(db, f)
 
-# 🛑 ULTRA PING (Har 2 minute me jagayega taaki data delete na ho)
 def keep_awake():
     while True:
         time.sleep(120)
@@ -48,7 +47,6 @@ def background_order_sync():
                         if oid in res and type(res[oid]) == dict:
                             real_status = res[oid].get("status", o['status'])
                             if real_status.lower() != o['status'].lower():
-                                # 💎 BOT MESSAGE FIX (No Markdown errors)
                                 if real_status.lower() in ['completed', 'canceled', 'cancelled', 'partial']:
                                     status_emo = "🟢" if real_status.lower() == 'completed' else ("🔴" if real_status.lower() in ['canceled', 'cancelled'] else "🟡")
                                     msg = f"🔱 ⍟ ORDER UPDATE (P{p_id}) ⍟ 🔱\n\n👤 User: {o['username']}\n🛒 Service: {o['name'][:30]}...\n🆔 Order ID: {oid}\n{status_emo} Status: {real_status.upper()}"
@@ -78,7 +76,6 @@ def poll_telegram(p_id):
             for update in res.get('result', []):
                 offset = update['update_id'] + 1
                 
-                # 🛡️ BOT ADMIN COMMAND FIX (/users)
                 if 'message' in update and 'text' in update['message']:
                     msg_text = update['message']['text']
                     chat_id = update['message']['chat']['id']
@@ -91,8 +88,6 @@ def poll_telegram(p_id):
                             for u_name, u_details in db['users'][p_id].items():
                                 em = u_details['email']
                                 keys.append([{"text": f"👤 {u_name}", "callback_data": f"uinfo_{em}"}])
-                            
-                            # Max 50 users list to avoid Telegram limits
                             markup = {"inline_keyboard": keys[:50]} 
                             list_msg = f"👑 TOTAL USERS (P{p_id}): {total_users} 👑\n\n⚡ Click on any user below to view details:"
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": list_msg, "reply_markup": markup})
@@ -144,11 +139,17 @@ def poll_telegram(p_id):
                     if "_" in data and data.split('_')[0] in ["app", "rej", "blk"]:
                         action, utr = data.split('_', 1)
                         email_match = re.search(r'User:\s*([^\n]+)', text_content)
-                        amt_match = re.search(r'₹([\d\.]+)', text_content)
+                        amt_match = re.search(r'Amount: ₹([\d\.]+)', text_content)
                         
                         email = email_match.group(1).strip() if email_match else "Unknown"
-                        amount = float(amt_match.group(1)) if amt_match else 0.0
                         
+                        if action == "blk":
+                            if email not in db['blocked'][p_id]: db['blocked'][p_id].append(email)
+                            save_db()
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={"chat_id": chat_id, "message_id": msg_id, "text": f"🚫 USER BLOCKED & DELETED!\n👤 User: {email}"})
+                            continue
+
+                        amount = float(amt_match.group(1)) if amt_match else 0.0
                         if action == "app":
                             db['balances'][p_id][email] = db['balances'][p_id].get(email, 0.0) + amount
                             for t in db['txns']:
@@ -176,13 +177,16 @@ threading.Thread(target=poll_telegram, args=("2",), daemon=True).start()
 @app.route("/api/signup", methods=["POST"])
 def signup():
     d = request.json
-    p_id, user, email, pwd = str(d['panel']), d['username'].lower().strip(), d['email'].lower().strip(), d['pass']
+    p_id, user, email, pwd, ref = str(d['panel']), d['username'].lower().strip(), d['email'].lower().strip(), d['pass'], d.get('ref', '')
     if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
     if user in db['users'][p_id] or any(u['email'] == email for u in db['users'][p_id].values()): return jsonify({"error": "Username or Email already exists!"}), 400
-    db['users'][p_id][user] = {"email": email, "password": pwd}
+    db['users'][p_id][user] = {"email": email, "password": pwd, "referred_by": ref}
     save_db()
-    msg = f"💎 ⍟ NEW SIGNUP (P{p_id}) ⍟ 💎\n\n👤 Name: {user}\n✉️ Email: {email}"
-    requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg})
+    
+    # 💎 ADDED BLOCK BUTTON ON SIGNUP
+    msg = f"💎 ⍟ NEW SIGNUP (P{p_id}) ⍟ 💎\n\n👤 Name: {user}\n✉️ Email: {email}\n🔗 Ref By: {ref if ref else 'None'}"
+    markup = {"inline_keyboard": [[{"text": "🚫 BLOCK & DELETE USER", "callback_data": f"blkusr_{email}"}]]}
+    requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg, "reply_markup": markup})
     return jsonify({"status": "success"})
 
 @app.route("/api/login", methods=["POST"])
@@ -193,32 +197,50 @@ def login():
         return jsonify({"error": "Invalid Username or Password!"}), 400
     email = db['users'][p_id][user]["email"]
     if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
+    
+    # Send Login Notification with Block Button
+    msg = f"🔑 ⍟ USER LOGIN (P{p_id}) ⍟ 🔑\n\n👤 Name: {user}\n✉️ Email: {email}"
+    markup = {"inline_keyboard": [[{"text": "🚫 BLOCK USER", "callback_data": f"blkusr_{email}"}]]}
+    requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg, "reply_markup": markup})
     return jsonify({"status": "success", "email": email})
 
-# 🛑 SECURE GOOGLE LOGIN CHECK
 @app.route("/api/google-auth", methods=["POST"])
 def google_auth():
     d = request.json
-    p_id, email, req_username = str(d['panel']), d['email'].lower().strip(), d['username'].lower().strip()
+    p_id, email, req_username, ref = str(d['panel']), d['email'].lower().strip(), d['username'].lower().strip(), d.get('ref', '')
     
     if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
     
-    # 🛡️ SECURITY FIX: Agar email match ho, toh Username bhi match hona chahiye
     for u, details in db['users'][p_id].items():
         if details['email'] == email:
             if u != req_username:
                 return jsonify({"error": "Security Alert: Username does not match this Email!"}), 400
+            
+            # Existing Google Login
+            msg = f"🔑 ⍟ GOOGLE LOGIN (P{p_id}) ⍟ 🔑\n\n👤 Name: {u}\n✉️ Email: {email}"
+            markup = {"inline_keyboard": [[{"text": "🚫 BLOCK USER", "callback_data": f"blkusr_{email}"}]]}
+            requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg, "reply_markup": markup})
             return jsonify({"status": "success", "email": email, "username": u})
             
-    # Naya User Ban raha hai
     if req_username in db['users'][p_id]: 
         return jsonify({"error": "Username already taken. Please choose another."}), 400
         
-    db['users'][p_id][req_username] = {"email": email, "password": "GoogleLogin"}
+    db['users'][p_id][req_username] = {"email": email, "password": "GoogleLogin", "referred_by": ref}
     save_db()
-    msg = f"💠 ⍟ SECURE GOOGLE LOGIN (P{p_id}) ⍟ 💠\n\n👤 Name: {req_username}\n✉️ Email: {email}"
-    requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg})
+    msg = f"💠 ⍟ SECURE GOOGLE SIGNUP (P{p_id}) ⍟ 💠\n\n👤 Name: {req_username}\n✉️ Email: {email}\n🔗 Ref By: {ref if ref else 'None'}"
+    markup = {"inline_keyboard": [[{"text": "🚫 BLOCK & DELETE USER", "callback_data": f"blkusr_{email}"}]]}
+    requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg, "reply_markup": markup})
     return jsonify({"status": "success", "email": email, "username": req_username})
+
+@app.route("/api/claim-gift", methods=["POST"])
+def claim_gift():
+    d = request.json
+    p_id, user, email = str(d['panel']), d['username'], d['email']
+    g_type, l_foll, l_view = d['type'], d['link_foll'], d.get('link_view', '')
+    
+    msg = f"🎁 ⍟ VIP GIFT CLAIM (P{p_id}) ⍟ 🎁\n\n👤 User: {user}\n✉️ Email: {email}\n🏆 Gift: {g_type}\n\n🔗 Followers Link:\n{l_foll}\n\n🔗 Views Link:\n{l_view}"
+    requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg})
+    return jsonify({"status": "success"})
 
 @app.route("/api/get-services", methods=["POST"])
 def get_services():
@@ -234,7 +256,7 @@ def add_funds():
     db['txns'].append({"status": "Pending", "email": email, "panel": p_id, "amount": amt, "utr": utr})
     save_db()
     text = f"🚨 ⍟ FUND REQUEST ⍟ 🚨\n\n👤 User: {email}\n💰 Amount: ₹{amt}\n🧾 UTR/TXN: {utr}\n🎛️ Panel: {p_id}"
-    markup = {"inline_keyboard": [[{"text": "✅ APPROVE", "callback_data": f"app_{utr}"}, {"text": "❌ REJECT", "callback_data": f"rej_{utr}"}], [{"text": "🚫 BLOCK & DELETE USER", "callback_data": f"blk_{utr}"}]]}
+    markup = {"inline_keyboard": [[{"text": "✅ APPROVE", "callback_data": f"app_{utr}"}, {"text": "❌ REJECT", "callback_data": f"rej_{utr}"}], [{"text": "🚫 BLOCK & DELETE USER", "callback_data": f"blk_{email}"}]]}
     requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": text, "reply_markup": markup})
     return jsonify({"status": "success"})
 
@@ -262,7 +284,26 @@ def sync():
     if email in db['blocked'][p_id]: return jsonify({"status": "blocked"}), 403
     user_orders = [o for o in db['orders'] if o['email'] == email and o['panel'] == p_id]
     user_txns = [t for t in db['txns'] if t['email'] == email and t['panel'] == p_id]
-    return jsonify({"balance": db['balances'][p_id].get(email, 0.0), "txns": user_txns, "orders": user_orders})
+    
+    # 🏆 REFERRAL SYSTEM CALCULATION
+    current_username = next((u for u, d in db['users'][p_id].items() if d['email'] == email), None)
+    ref_total = 0
+    ref_active = 0
+    if current_username:
+        for u, d in db['users'][p_id].items():
+            if d.get("referred_by") == current_username:
+                ref_total += 1
+                # Check if this referred user has placed any orders
+                if any(o['email'] == d['email'] for o in db['orders']):
+                    ref_active += 1
+
+    return jsonify({
+        "balance": db['balances'][p_id].get(email, 0.0), 
+        "txns": user_txns, 
+        "orders": user_orders,
+        "ref_total": ref_total,
+        "ref_active": ref_active
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
