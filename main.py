@@ -10,7 +10,6 @@ PANELS = {
     "2": {"url": "https://secsers.com/api/v2", "key": "831913f4125f0576233bb032555d147c", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
 }
 
-# 💾 STRONG PERMANENT DATABASE
 DB_FILE = "malik_db.json"
 def load_db():
     if os.path.exists(DB_FILE):
@@ -24,10 +23,20 @@ db = load_db()
 def save_db():
     with open(DB_FILE, "w") as f: json.dump(db, f)
 
-# 🚀 STRONG METHOD: Background Order Checker (For Bot Messages & Refunds)
+# 🛑 ULTRA STRONG ANTI-SLEEP METHOD (DATA LOSS FIX)
+def keep_awake():
+    while True:
+        time.sleep(300) # Pings itself every 5 mins so Render NEVER sleeps
+        try: requests.get("https://malik-proxy-smm.onrender.com/api/ping")
+        except: pass
+threading.Thread(target=keep_awake, daemon=True).start()
+
+@app.route("/api/ping", methods=["GET"])
+def ping(): return "Alive"
+
 def background_order_sync():
     while True:
-        time.sleep(30) # Har 30 second me check karega
+        time.sleep(30)
         for p_id in ["1", "2"]:
             pending_orders = [o for o in db['orders'] if o['panel'] == p_id and o['status'].lower() not in ['completed', 'canceled', 'cancelled', 'partial']]
             if pending_orders:
@@ -42,7 +51,6 @@ def background_order_sync():
                                 if real_status.lower() in ['completed', 'canceled', 'cancelled', 'partial']:
                                     msg = f"🔔 *ORDER {real_status.upper()} (P{p_id})*\n👤 User: {o['username']}\n🛒 Service: {o['name']}\n🆔 Order ID: {oid}\n📊 Qty: {o['qty']}"
                                     requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg, "parse_mode": "Markdown"})
-                                    
                                     o['status'] = real_status
                                     if real_status.lower() in ['canceled', 'cancelled'] and not o['refunded']:
                                         db['balances'][p_id][o['email']] = db['balances'][p_id].get(o['email'], 0.0) + o['charge']
@@ -67,56 +75,88 @@ def poll_telegram(p_id):
             for update in res.get('result', []):
                 offset = update['update_id'] + 1
                 
-                # 🛡️ BOT ADMIN COMMAND: /users (WITH TOTAL USERS FIX)
+                # 🛡️ ULTRA STRONG BOT ADMIN PANEL
                 if 'message' in update and 'text' in update['message']:
                     msg_text = update['message']['text']
                     chat_id = update['message']['chat']['id']
                     if msg_text == '/users':
                         total_users = len(db['users'][p_id])
-                        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"👥 *TOTAL USERS ON PANEL {p_id}: {total_users}*", "parse_mode": "Markdown"})
-                        
-                        if total_users > 0:
+                        if total_users == 0:
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "No users found."})
+                        else:
+                            keys = []
                             for u_name, u_details in db['users'][p_id].items():
                                 em = u_details['email']
-                                bal = db['balances'][p_id].get(em, 0.0)
-                                stat = "🚫 BLOCKED" if em in db['blocked'][p_id] else "✅ ACTIVE"
-                                markup = {"inline_keyboard": [[{"text": f"🚫 BLOCK {u_name}", "callback_data": f"blkusr_{em}"}]]}
-                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"👤 User: {u_name}\n✉️ Email: {em}\n💰 Bal: ₹{bal}\n📊 Status: {stat}", "reply_markup": markup})
+                                keys.append([{"text": f"👤 {u_name} ({em})", "callback_data": f"uinfo_{em}"}])
+                            markup = {"inline_keyboard": keys}
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"👥 *TOTAL USERS (P{p_id}): {total_users}*\nClick a user for details:", "parse_mode": "Markdown", "reply_markup": markup})
 
                 if 'callback_query' in update:
                     data = update['callback_query']['data']
                     msg = update['callback_query']['message']
+                    chat_id = msg['chat']['id']
+                    msg_id = msg['message_id']
                     
-                    if data.startswith("blkusr_"):
-                        target_email = data.replace("blkusr_", "")
-                        if target_email not in db['blocked'][p_id]: 
-                            db['blocked'][p_id].append(target_email)
-                            save_db()
-                        requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={"chat_id": msg['chat']['id'], "message_id": msg['message_id'], "text": f"🚫 *USER COMPLETELY BLOCKED!*\n✉️ Email: {target_email}", "parse_mode": "Markdown"})
+                    if data.startswith("uinfo_"):
+                        target_email = data.replace("uinfo_", "")
+                        uname = next((u for u, d in db['users'][p_id].items() if d['email'] == target_email), "Unknown")
+                        bal = db['balances'][p_id].get(target_email, 0.0)
+                        stat = "🚫 BLOCKED" if target_email in db['blocked'][p_id] else "✅ ACTIVE"
+                        b_text = "✅ UNBLOCK USER" if target_email in db['blocked'][p_id] else "🚫 BLOCK USER"
+                        markup = {"inline_keyboard": [
+                            [{"text": b_text, "callback_data": f"blkusr_{target_email}"}],
+                            [{"text": "📦 VIEW ORDERS", "callback_data": f"uord_{target_email}"}],
+                        ]}
+                        text = f"👤 *USER INFO*\nName: {uname}\nEmail: {target_email}\n💰 Balance: ₹{bal}\n📊 Status: {stat}"
+                        requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={"chat_id": chat_id, "message_id": msg_id, "text": text, "parse_mode": "Markdown", "reply_markup": markup})
+                        continue
+                        
+                    if data.startswith("uord_"):
+                        target_email = data.replace("uord_", "")
+                        u_orders = [o for o in db['orders'] if o['email'] == target_email and o['panel'] == p_id][-5:] # Last 5 orders
+                        if not u_orders:
+                            o_text = f"User {target_email} has no orders."
+                        else:
+                            o_text = f"📦 *LAST 5 ORDERS for {target_email}*\n\n"
+                            for o in u_orders: o_text += f"ID: {o['id']} | {o['name'][:15]}... | Qty: {o['qty']} | Stat: {o['status']}\n"
+                        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": o_text, "parse_mode": "Markdown"})
                         continue
 
-                    action, utr = data.split('_', 1)
-                    email = msg['text'].split('\n')[1].replace('👤 ', '').strip()
-                    amount = float(msg['text'].split('\n')[2].replace('💰 ₹', '').strip())
-                    
-                    if action == "app":
-                        db['balances'][p_id][email] = db['balances'][p_id].get(email, 0.0) + amount
-                        for t in db['txns']:
-                            if t['utr'] == utr: t['status'] = "Approved"
-                        if not any(t['utr'] == utr for t in db['txns']):
-                            db['txns'].append({"status": "Approved", "email": email, "panel": p_id, "amount": amount, "utr": utr})
+                    if data.startswith("blkusr_"):
+                        target_email = data.replace("blkusr_", "")
+                        if target_email in db['blocked'][p_id]:
+                            db['blocked'][p_id].remove(target_email)
+                            stat = "✅ UNBLOCKED"
+                        else:
+                            db['blocked'][p_id].append(target_email)
+                            stat = "🚫 BLOCKED"
                         save_db()
-                        text_msg = f"✅ *APPROVED SUCCESSFULLY!*\n👤 User: {email}\n💰 New Balance: ₹{db['balances'][p_id][email]}"
-                    
-                    elif action == "rej":
-                        for t in db['txns']:
-                            if t['utr'] == utr: t['status'] = "Rejected"
-                        if not any(t['utr'] == utr for t in db['txns']):
-                            db['txns'].append({"status": "Rejected", "email": email, "panel": p_id, "amount": amount, "utr": utr})
-                        save_db()
-                        text_msg = f"❌ *REJECTED!*\n👤 User: {email}\n⚠️ Warning Sent."
-                    
-                    requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={"chat_id": msg['chat']['id'], "message_id": msg['message_id'], "text": text_msg, "parse_mode": "Markdown"})
+                        requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={"chat_id": chat_id, "message_id": msg_id, "text": f"*USER STATUS UPDATED: {stat}!*\n✉️ Email: {target_email}", "parse_mode": "Markdown"})
+                        continue
+
+                    if "_" in data and data.split('_')[0] in ["app", "rej", "blk"]:
+                        action, utr = data.split('_', 1)
+                        email = msg['text'].split('\n')[1].replace('👤 ', '').strip()
+                        amount = float(msg['text'].split('\n')[2].replace('💰 ₹', '').strip())
+                        
+                        if action == "app":
+                            db['balances'][p_id][email] = db['balances'][p_id].get(email, 0.0) + amount
+                            for t in db['txns']:
+                                if t['utr'] == utr: t['status'] = "Approved"
+                            if not any(t['utr'] == utr for t in db['txns']):
+                                db['txns'].append({"status": "Approved", "email": email, "panel": p_id, "amount": amount, "utr": utr})
+                            save_db()
+                            text_msg = f"✅ *APPROVED SUCCESSFULLY!*\n👤 User: {email}\n💰 New Balance: ₹{db['balances'][p_id][email]}"
+                        
+                        elif action == "rej":
+                            for t in db['txns']:
+                                if t['utr'] == utr: t['status'] = "Rejected"
+                            if not any(t['utr'] == utr for t in db['txns']):
+                                db['txns'].append({"status": "Rejected", "email": email, "panel": p_id, "amount": amount, "utr": utr})
+                            save_db()
+                            text_msg = f"❌ *REJECTED!*\n👤 User: {email}\n⚠️ Warning Sent."
+                        
+                        requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={"chat_id": chat_id, "message_id": msg_id, "text": text_msg, "parse_mode": "Markdown"})
         except: pass
         time.sleep(1.5)
 
