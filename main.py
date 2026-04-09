@@ -5,18 +5,24 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
+# 🛑 PANEL 2 API UPDATED AS PER YOUR SCREENSHOT
 PANELS = {
     "1": {"url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
-    "2": {"url": "https://secsers.com/api/v2", "key": "831913f4125f0576233bb032555d147c", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
+    "2": {"url": "https://wowsmmpanel.com/api/v2", "key": "9ddd128b2174a854bb4c3c97a7769ebe", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
 }
 
 DB_FILE = "malik_db.json"
 def load_db():
     if os.path.exists(DB_FILE):
         try:
-            with open(DB_FILE, "r") as f: return json.load(f)
+            with open(DB_FILE, "r") as f:
+                data = json.load(f)
+                # Ensure mails storage exists
+                if "mails" not in data:
+                    data["mails"] = {"1": {}, "2": {}}
+                return data
         except: pass
-    return {"users": {"1": {}, "2": {}}, "balances": {"1": {}, "2": {}}, "txns": [], "orders": [], "blocked": {"1": [], "2": []}}
+    return {"users": {"1": {}, "2": {}}, "balances": {"1": {}, "2": {}}, "txns": [], "orders": [], "blocked": {"1": [], "2": []}, "mails": {"1": {}, "2": {}}}
 
 db = load_db()
 
@@ -77,10 +83,11 @@ def poll_telegram(p_id):
             for update in res.get('result', []):
                 offset = update['update_id'] + 1
                 
-                # 🛡️ BOT ADMIN COMMAND
+                # 🛡️ BOT ADMIN COMMANDS & MAIL REPLY
                 if 'message' in update and 'text' in update['message']:
                     msg_text = update['message']['text']
                     chat_id = update['message']['chat']['id']
+                    
                     if msg_text == '/users':
                         total_users = len(db['users'][p_id])
                         if total_users == 0:
@@ -93,6 +100,17 @@ def poll_telegram(p_id):
                             markup = {"inline_keyboard": keys[:50]} 
                             list_msg = f"👑 TOTAL USERS (P{p_id}): {total_users} 👑\n\n⚡ Click a user below:"
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": list_msg, "reply_markup": markup})
+                    
+                    # MAIL REPLY COMMAND
+                    elif msg_text.startswith('/reply '):
+                        parts = msg_text.split(' ', 2)
+                        if len(parts) >= 3:
+                            target_email = parts[1].strip()
+                            reply_msg = parts[2].strip()
+                            if target_email not in db['mails'][p_id]: db['mails'][p_id][target_email] = []
+                            db['mails'][p_id][target_email].append({"from": "admin", "msg": reply_msg, "read": False})
+                            save_db()
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Reply sent successfully to user {target_email}!"})
 
                 if 'callback_query' in update:
                     data = update['callback_query']['data']
@@ -101,6 +119,13 @@ def poll_telegram(p_id):
                     msg_id = msg['message_id']
                     text_content = msg.get('text', '')
                     
+                    # ✉️ MAIL REPLY BUTTON
+                    if data.startswith("replymail_"):
+                        target_email = data.replace("replymail_", "")
+                        info_text = f"💬 To reply to {target_email}, copy and send this command exactly:\n\n`/reply {target_email} Your reply message here`"
+                        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": info_text, "parse_mode": "Markdown"})
+                        continue
+
                     if data.startswith("uinfo_"):
                         target_email = data.replace("uinfo_", "")
                         uname = next((u for u, d in db['users'][p_id].items() if d['email'] == target_email), "Unknown")
@@ -126,7 +151,6 @@ def poll_telegram(p_id):
                         requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": o_text})
                         continue
 
-                    # FULL WORKING BLOCK BUTTON
                     if data.startswith("blkusr_"):
                         target_email = data.replace("blkusr_", "")
                         if target_email in db['blocked'][p_id]:
@@ -244,6 +268,7 @@ def add_funds():
     requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": text, "reply_markup": markup})
     return jsonify({"status": "success"})
 
+# 🛑 ORDER API (LINK & STATUS PENDING ADDED)
 @app.route("/api/place-order", methods=["POST"])
 def place_order():
     d = request.json
@@ -258,7 +283,6 @@ def place_order():
     order_id = res.get("order")
     db['orders'].append({"email": email, "panel": p_id, "id": order_id, "name": s_name, "qty": qty, "charge": charge, "status": "Pending", "refunded": False, "username": user})
     
-    # REFERRAL ACTIVE TRACKING
     if user in db['users'][p_id] and not db['users'][p_id][user].get('ordered', False):
         db['users'][p_id][user]['ordered'] = True
         ref_by = db['users'][p_id][user].get('ref_by')
@@ -266,7 +290,7 @@ def place_order():
             db['users'][p_id][ref_by]['ref_active'] = db['users'][p_id][ref_by].get('ref_active', 0) + 1
             
     save_db()
-    msg = f"🚀 ⍟ ORDER RECEIVED (P{p_id}) ⍟ 🚀\n\n👤 User: {user}\n🛒 Service: {s_name[:30]}...\n🆔 ID: {s_id}\n🔢 Qty: {qty}\n💸 Amt: ₹{charge}"
+    msg = f"🚀 ⍟ ORDER RECEIVED (P{p_id}) ⍟ 🚀\n\n👤 User: {user}\n🛒 Service: {s_name[:30]}...\n🆔 ID: {s_id}\n🔗 Link: {link}\n🔢 Qty: {qty}\n💸 Amt: ₹{charge}\n🟡 Status: Pending"
     requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg})
     return jsonify({"status": "success", "order": order_id})
 
@@ -297,6 +321,23 @@ def claim_reward():
     requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": msg})
     return jsonify({"status": "success"})
 
+# 📬 USER SENDS SUPPORT MESSAGE ROUTE
+@app.route("/api/send-mail", methods=["POST"])
+def send_mail():
+    d = request.json
+    p_id, email, message = str(d['panel']), d['email'], d['message']
+    if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
+    
+    if email not in db['mails'][p_id]: db['mails'][p_id][email] = []
+    db['mails'][p_id][email].append({"from": "user", "msg": message, "read": True})
+    save_db()
+    
+    text = f"📬 ⍟ NEW SUPPORT MAIL (P{p_id}) ⍟ 📬\n\n👤 User: {email}\n💬 Msg: {message}"
+    markup = {"inline_keyboard": [[{"text": "✉️ REPLY TO USER", "callback_data": f"replymail_{email}"}]]}
+    requests.post(f"https://api.telegram.org/bot{PANELS[p_id]['bot']}/sendMessage", json={"chat_id": PANELS[p_id]['chat'], "text": text, "reply_markup": markup})
+    return jsonify({"status": "success"})
+
+# 📬 MAIL SYNC WITH UI (POPUP ALERT)
 @app.route("/api/sync", methods=["POST"])
 def sync():
     email, p_id = request.json['email'], str(request.json['panel'])
@@ -304,13 +345,25 @@ def sync():
     user_orders = [o for o in db['orders'] if o['email'] == email and o['panel'] == p_id]
     user_txns = [t for t in db['txns'] if t['email'] == email and t['panel'] == p_id]
     
-    # Send user info for referral display
     user_info = {}
     for u, details in db['users'][p_id].items():
         if details['email'] == email:
             user_info = details; break
             
-    return jsonify({"balance": db['balances'][p_id].get(email, 0.0), "txns": user_txns, "orders": user_orders, "user_info": user_info})
+    user_mails = db['mails'][p_id].get(email, [])
+    unread_admin_mails = [m['msg'] for m in user_mails if m['from'] == 'admin' and not m.get('read', False)]
+    for m in user_mails:
+        if m['from'] == 'admin': m['read'] = True
+    if unread_admin_mails: save_db()
+            
+    return jsonify({
+        "balance": db['balances'][p_id].get(email, 0.0), 
+        "txns": user_txns, 
+        "orders": user_orders, 
+        "user_info": user_info,
+        "unread_mails": unread_admin_mails,
+        "all_mails": user_mails
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
