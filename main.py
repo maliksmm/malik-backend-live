@@ -5,7 +5,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# 🛑 PANEL APIs (Panel 2 Updated)
+# 🛑 PANEL APIs (Panel 2 Updated with WOW SMM Panel)
 PANELS = {
     "1": {"url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
     "2": {"url": "https://wowsmmpanel.com/api/v2", "key": "9ddd128b2174a854bb4c3c97a7769ebe", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
@@ -152,6 +152,7 @@ def poll_telegram(p_id):
                             perc, mins, reason = int(parts[1]), int(parts[2]), parts[3]
                             db['discounts']['all'][p_id] = {"percent": perc, "exp": time.time() + (mins*60)}
                             
+                            # Auto-Broadcast reason
                             for u_name, u_details in db['users'][p_id].items():
                                 em = u_details['email']
                                 bmsg = f"Hey dear {u_name}, {reason}! Enjoy the {perc}% discount valid for {mins} minutes!"
@@ -457,3 +458,4 @@ def sync():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
+
