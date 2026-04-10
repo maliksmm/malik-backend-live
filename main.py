@@ -18,7 +18,7 @@ def load_db():
         try:
             with open(DB_FILE, "r") as f:
                 data = json.load(f)
-                # Ensure all new storage dictionaries exist without overwriting old data
+                # Ensure new storage dictionaries exist without overwriting old data
                 if "mails" not in data: data["mails"] = {"1": {}, "2": {}}
                 if "config" not in data: data["config"] = {"qr_1": "./AccountQRCodeJ&K Bank - 6648_DARK_THEME (13).png", "qr_2": "./AccountQRCodeJ&K Bank - 6648_DARK_THEME (13).png"}
                 if "discounts" not in data: data["discounts"] = {"users": {"1": {}, "2": {}}, "all": {"1": {"percent": 0, "exp": 0}, "2": {"percent": 0, "exp": 0}}}
@@ -42,7 +42,7 @@ threading.Thread(target=keep_awake, daemon=True).start()
 @app.route("/api/ping", methods=["GET"])
 def ping(): return "Alive"
 
-# 🔄 BACKGROUND ORDER SYNC
+# 🔄 BACKGROUND ORDER SYNC (Refunds & Status Update)
 def background_order_sync():
     while True:
         time.sleep(15)
@@ -77,7 +77,7 @@ def background_order_sync():
 
 threading.Thread(target=background_order_sync, daemon=True).start()
 
-# 🤖 TELEGRAM BOT POLLING (Full Control System)
+# 🤖 TELEGRAM BOT POLLING (Full VIP Control System)
 def poll_telegram(p_id):
     bot_token = PANELS[p_id]["bot"]
     offset = 0
@@ -97,7 +97,7 @@ def poll_telegram(p_id):
                         requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "👑 Welcome Admin! Use the keyboard buttons or type commands to control the app.", "reply_markup": markup})
                     
                     elif msg_text == '/help_commands':
-                        txt = "🛠️ *ADMIN COMMANDS*\n\n`/users` - List all users\n`/setqr <url>` - Change app QR code image\n`/discount <email> <percent> <mins>` - Give user discount\n`/discountall <percent> <mins> <reason>` - Global discount\n`/broadcast <msg>` - Send mail to everyone\n`/reply <email> <msg>` - Reply to specific user\n`/appinfo` - View app stats"
+                        txt = "🛠️ *ADMIN COMMANDS*\n\n`/users` - List all users\n`/appinfo` - View app stats\n`/setqr <url>` - Change app QR code image\n`/discount <email> <percent> <mins>` - Give user discount\n`/discountall <percent> <mins> <reason>` - Global discount\n`/broadcast <msg>` - Send mail to everyone\n`/reply <email> <msg>` - Reply to specific user"
                         requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": txt, "parse_mode": "Markdown"})
 
                     elif msg_text == '/appinfo':
@@ -115,7 +115,7 @@ def poll_telegram(p_id):
                             for u_name, u_details in db['users'][p_id].items():
                                 em = u_details['email']
                                 keys.append([{"text": f"👤 {u_name}", "callback_data": f"uinfo_{em}"}])
-                            markup = {"inline_keyboard": keys[:50]} # Show top 50 users max to avoid TG limits
+                            markup = {"inline_keyboard": keys[:50]} # Top 50 to avoid TG limits
                             list_msg = f"👑 TOTAL USERS (P{p_id}): {total_users} 👑\n\n⚡ Click a user below:"
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": list_msg, "reply_markup": markup})
                     
@@ -152,7 +152,6 @@ def poll_telegram(p_id):
                             perc, mins, reason = int(parts[1]), int(parts[2]), parts[3]
                             db['discounts']['all'][p_id] = {"percent": perc, "exp": time.time() + (mins*60)}
                             
-                            # Auto-Broadcast reason
                             for u_name, u_details in db['users'][p_id].items():
                                 em = u_details['email']
                                 bmsg = f"Hey dear {u_name}, {reason}! Enjoy the {perc}% discount valid for {mins} minutes!"
@@ -176,7 +175,7 @@ def poll_telegram(p_id):
                         except Exception as e:
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Error. Use format: /discount <email> <percent> <mins>"})
 
-                # 🖲️ INLINE BUTTON ACTIONS
+                # 🖲️ INLINE BUTTON ACTIONS (Block, Approve, Reject, Info)
                 if 'callback_query' in update:
                     data = update['callback_query']['data']
                     msg = update['callback_query']['message']
