@@ -12,7 +12,6 @@ def load_db():
         try:
             with open(DB_FILE, "r") as f:
                 data = json.load(f)
-                
                 if "panels" not in data:
                     data["panels"] = {
                         "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
@@ -34,6 +33,7 @@ def load_db():
                     }
                 if "discounts" not in data: data["discounts"] = {"users": {}, "all": {}}
                 
+                # Ensure panel structures exist in sub-dicts
                 for p_id in data["panels"]:
                     if p_id not in data["users"]: data["users"][p_id] = {}
                     if p_id not in data["balances"]: data["balances"][p_id] = {}
@@ -45,6 +45,7 @@ def load_db():
         except Exception as e: 
             pass
     
+    # Default initial DB
     default_panels = {
         "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
         "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "3e3ed3099b90f481aa88e85d692b67a3", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
@@ -444,7 +445,7 @@ def signup():
     if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
     if user in db['users'][p_id] or any(u['email'] == email for u in db['users'][p_id].values()): return jsonify({"error": "Username or Email already exists!"}), 400
     
-    db['users'][p_id][user] = {"email": email, "password": pwd, "ref_by": ref_by, "ordered": False, "ref_signups": 0, "ref_active": 0, "first_claim": False}
+    db['users'][p_id][user] = {"email": email, "password": pwd, "ref_by": ref_by, "ordered": False, "ref_signups": 0, "ref_active": 0, "first_claim": False, "avatar": ""}
     if ref_by and ref_by in db['users'][p_id]: db['users'][p_id][ref_by]['ref_signups'] += 1
     save_db()
     
@@ -463,8 +464,9 @@ def login():
     if p_id not in db['users'] or user not in db['users'][p_id] or db['users'][p_id][user]["password"] != pwd:
         return jsonify({"error": "Invalid Username or Password!"}), 400
     email = db['users'][p_id][user]["email"]
+    avatar = db['users'][p_id][user].get("avatar", "")
     if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
-    return jsonify({"status": "success", "email": email, "username": user})
+    return jsonify({"status": "success", "email": email, "username": user, "avatar": avatar})
 
 @app.route("/api/change-password", methods=["POST"])
 def change_pass():
@@ -479,6 +481,55 @@ def change_pass():
             return jsonify({"error": "Old password incorrect!"}), 400
     return jsonify({"error": "User not found!"}), 400
 
+@app.route("/api/update-profile", methods=["POST"])
+def update_profile():
+    d = request.json
+    p_id = str(d['panel'])
+    old_email = d['old_email']
+    new_username = d['new_username'].lower().strip()
+    new_email = d['new_email'].lower().strip()
+    avatar = d.get('avatar', '').strip()
+
+    if p_id not in db['panels']: return jsonify({"error": "Invalid Panel"}), 400
+
+    user_key = None
+    for u, details in db['users'][p_id].items():
+        if details['email'] == old_email:
+            user_key = u
+            break
+    
+    if not user_key: return jsonify({"error": "User not found!"}), 400
+    
+    if new_username != user_key and new_username in db['users'][p_id]:
+        return jsonify({"error": "Username already taken!"}), 400
+    if new_email != old_email and any(u['email'] == new_email for u in db['users'][p_id].values()):
+        return jsonify({"error": "Email already registered!"}), 400
+
+    user_data = db['users'][p_id].pop(user_key)
+    user_data['email'] = new_email
+    user_data['avatar'] = avatar
+    
+    db['users'][p_id][new_username] = user_data
+
+    if new_email != old_email:
+        if old_email in db['balances'][p_id]:
+            db['balances'][p_id][new_email] = db['balances'][p_id].pop(old_email)
+        if old_email in db['blocked'][p_id]:
+            db['blocked'][p_id].remove(old_email)
+            db['blocked'][p_id].append(new_email)
+        if old_email in db['mails'][p_id]:
+            db['mails'][p_id][new_email] = db['mails'][p_id].pop(old_email)
+        if old_email in db['discounts']['users'][p_id]:
+            db['discounts']['users'][p_id][new_email] = db['discounts']['users'][p_id].pop(old_email)
+        
+        for o in db['orders']:
+            if o['panel'] == p_id and o['email'] == old_email: o['email'] = new_email
+        for t in db['txns']:
+            if t['panel'] == p_id and t['email'] == old_email: t['email'] = new_email
+
+    save_db()
+    return jsonify({"status": "success", "username": new_username, "email": new_email, "avatar": avatar})
+
 @app.route("/api/google-auth", methods=["POST"])
 def google_auth():
     d = request.json
@@ -489,26 +540,30 @@ def google_auth():
     for u, details in db['users'][p_id].items():
         if details['email'] == email:
             if u != req_username: return jsonify({"error": "Username does not match this Email!"}), 400
-            return jsonify({"status": "success", "email": email, "username": u})
+            return jsonify({"status": "success", "email": email, "username": u, "avatar": details.get("avatar", "")})
             
     if req_username in db['users'][p_id]: return jsonify({"error": "Username already taken."}), 400
-    db['users'][p_id][req_username] = {"email": email, "password": "GoogleLogin", "ref_by": "", "ordered": False, "ref_signups": 0, "ref_active": 0, "first_claim": False}
+    db['users'][p_id][req_username] = {"email": email, "password": "GoogleLogin", "ref_by": "", "ordered": False, "ref_signups": 0, "ref_active": 0, "first_claim": False, "avatar": ""}
     save_db()
     
     msg = f"💠 ⍟ SECURE GOOGLE LOGIN ({db['panels'][p_id]['name']}) ⍟ 💠\n\n👤 Name: {req_username}\n✉️ Email: {email}"
     markup = {"inline_keyboard": [[{"text": "🚫 BLOCK USER", "callback_data": f"blkusr_{email}"}]]}
     requests.post(f"https://api.telegram.org/bot{db['panels'][p_id]['bot']}/sendMessage", json={"chat_id": db['panels'][p_id]['chat'], "text": msg, "reply_markup": markup})
-    return jsonify({"status": "success", "email": email, "username": req_username})
+    return jsonify({"status": "success", "email": email, "username": req_username, "avatar": ""})
 
 @app.route("/api/get-services", methods=["POST"])
 def get_services():
     p_id = str(request.json.get("panel"))
     if p_id not in db['panels']: return jsonify([])
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+            'Accept': 'application/json'
+        }
         res = requests.post(db['panels'][p_id]["url"], data={"key": db['panels'][p_id]["key"], "action": "services"}, headers=headers, timeout=15)
         if res.status_code == 200:
-            return jsonify(res.json())
+            data = res.json()
+            return jsonify(data if isinstance(data, list) else [])
         return jsonify([])
     except: 
         return jsonify([])
@@ -667,3 +722,4 @@ def sync():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
+
