@@ -5,7 +5,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# 🛑 PANEL APIs
+# 🛑 PANEL APIs (Panel 2 Updated to wowsmmpanel)
 PANELS = {
     "1": {"url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
     "2": {"url": "https://wowsmmpanel.com/api/v2", "key": "9ddd128b2174a854bb4c3c97a7769ebe", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
@@ -18,7 +18,6 @@ def load_db():
         try:
             with open(DB_FILE, "r") as f:
                 data = json.load(f)
-                # Ensure new storage dictionaries exist without overwriting old data
                 if "mails" not in data: data["mails"] = {"1": {}, "2": {}}
                 if "config" not in data: data["config"] = {"qr_1": "./AccountQRCodeJ&K Bank - 6648_DARK_THEME (13).png", "qr_2": "./AccountQRCodeJ&K Bank - 6648_DARK_THEME (13).png"}
                 if "discounts" not in data: data["discounts"] = {"users": {"1": {}, "2": {}}, "all": {"1": {"percent": 0, "exp": 0}, "2": {"percent": 0, "exp": 0}}}
@@ -31,7 +30,7 @@ db = load_db()
 def save_db():
     with open(DB_FILE, "w") as f: json.dump(db, f)
 
-# 🛑 ULTRA PING (Server Jagta Rahega)
+# 🛑 SERVER PING (Always Awake)
 def keep_awake():
     while True:
         time.sleep(120)
@@ -42,7 +41,7 @@ threading.Thread(target=keep_awake, daemon=True).start()
 @app.route("/api/ping", methods=["GET"])
 def ping(): return "Alive"
 
-# 🔄 BACKGROUND ORDER SYNC (Refunds & Status Update)
+# 🔄 BACKGROUND ORDER SYNC (Refunds & Status Updates)
 def background_order_sync():
     while True:
         time.sleep(15)
@@ -77,7 +76,7 @@ def background_order_sync():
 
 threading.Thread(target=background_order_sync, daemon=True).start()
 
-# 🤖 TELEGRAM BOT POLLING (Full VIP Control System)
+# 🤖 TELEGRAM BOT POLLING
 def poll_telegram(p_id):
     bot_token = PANELS[p_id]["bot"]
     offset = 0
@@ -91,13 +90,13 @@ def poll_telegram(p_id):
                     msg_text = update['message']['text']
                     chat_id = update['message']['chat']['id']
                     
-                    # 🛠️ BOT COMMANDS
+                    # 🛠️ ADMIN BOT COMMANDS
                     if msg_text == '/start':
                         markup = {"keyboard": [[{"text": "/users"}, {"text": "/help_commands"}]], "resize_keyboard": True}
-                        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "👑 Welcome Admin! Use the keyboard buttons or type commands to control the app.", "reply_markup": markup})
+                        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "👑 Welcome Boss! System active.", "reply_markup": markup})
                     
                     elif msg_text == '/help_commands':
-                        txt = "🛠️ *ADMIN COMMANDS*\n\n`/users` - List all users\n`/appinfo` - View app stats\n`/setqr <url>` - Change app QR code image\n`/discount <email> <time> <unit> <percent>`\n`/discountall <time> <unit> <percent> <reason>`\n`/broadcast <msg>` - Send mail to everyone\n`/reply <email> <msg>` - Reply to specific user"
+                        txt = "🛠️ *VIP COMMANDS*\n\n`/users` - List all users\n`/appinfo` - View app stats\n`/setqr <url>` - Change QR image\n`/discount <email> <time> <unit> <percent>`\n`/discountall <time> <unit> <percent> <reason>`\n`/broadcast <msg>` - Send mail to everyone\n`/reply <email> <msg>` - Reply to specific user"
                         requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": txt, "parse_mode": "Markdown"})
 
                     elif msg_text == '/appinfo':
@@ -115,7 +114,7 @@ def poll_telegram(p_id):
                             for u_name, u_details in db['users'][p_id].items():
                                 em = u_details['email']
                                 keys.append([{"text": f"👤 {u_name}", "callback_data": f"uinfo_{em}"}])
-                            markup = {"inline_keyboard": keys[:50]} # Top 50 to avoid TG limits
+                            markup = {"inline_keyboard": keys[:50]} 
                             list_msg = f"👑 TOTAL USERS (P{p_id}): {total_users} 👑\n\n⚡ Click a user below:"
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": list_msg, "reply_markup": markup})
                     
@@ -146,10 +145,8 @@ def poll_telegram(p_id):
                         save_db()
                         requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Broadcast sent to {count} users!"})
 
-                    # 🎟️ ADVANCED GLOBAL DISCOUNT SYSTEM
                     elif msg_text.startswith('/discountall '):
                         try:
-                            # Format: /discountall 1 day 20 Eid Special
                             parts = msg_text.split(' ', 4)
                             t_val = int(parts[1])
                             t_unit = parts[2].lower()
@@ -165,7 +162,6 @@ def poll_telegram(p_id):
                             duration = t_val * multiplier
                             db['discounts']['all'][p_id] = {"percent": perc, "exp": time.time() + duration}
                             
-                            # Auto-Broadcast Reason to all users' mailbox
                             for u_name, u_details in db['users'][p_id].items():
                                 em = u_details['email']
                                 bmsg = f"Hey dear {u_name}, {reason}! Enjoy the {perc}% discount valid for {t_val} {t_unit}!"
@@ -174,12 +170,10 @@ def poll_telegram(p_id):
                             save_db()
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ {perc}% Global Discount applied for {t_val} {t_unit}!\nReason sent: {reason}"})
                         except Exception as e:
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Error. Use format: /discountall <time> <unit> <percent> <reason>\nExample: /discountall 1 day 20 Eid Mubarak"})
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Error. Use format: /discountall <time> <unit> <percent> <reason>\nExample: /discountall 1 day 20 Happy Eid"})
 
-                    # 🎟️ ADVANCED SINGLE USER DISCOUNT SYSTEM
                     elif msg_text.startswith('/discount '):
                         try:
-                            # Format: /discount user@gmail.com 10 min 20
                             parts = msg_text.split(' ')
                             em = parts[1]
                             t_val = int(parts[2])
@@ -202,7 +196,7 @@ def poll_telegram(p_id):
                         except Exception as e:
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Error. Use format: /discount <email> <time> <unit> <percent>\nExample: /discount user@mail.com 10 min 20"})
 
-                # 🖲️ INLINE BUTTON ACTIONS (Block, Approve, Reject, Info)
+                # 🖲️ INLINE BUTTON ACTIONS (Approve, Reject, Block, Profiles)
                 if 'callback_query' in update:
                     data = update['callback_query']['data']
                     msg = update['callback_query']['message']
@@ -300,7 +294,7 @@ def signup():
     p_id = str(d['panel'])
     user = d['username'].lower().strip()
     email = d['email'].lower().strip()
-    pwd = d['pass'].strip() # Fixed Login bug (matching exact password)
+    pwd = d['pass'].strip()
     ref_by = d.get('ref', '')
     
     if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
@@ -322,7 +316,7 @@ def login():
     d = request.json
     p_id = str(d['panel'])
     user = d['username'].lower().strip()
-    pwd = d['pass'].strip() # Fixed Login bug
+    pwd = d['pass'].strip()
     
     if user not in db['users'][p_id] or db['users'][p_id][user]["password"] != pwd:
         return jsonify({"error": "Invalid Username or Password!"}), 400
