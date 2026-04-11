@@ -5,7 +5,6 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# 🛑 PANEL APIs (Panel 2 Updated to wowsmmpanel)
 PANELS = {
     "1": {"url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
     "2": {"url": "https://wowsmmpanel.com/api/v2", "key": "9ddd128b2174a854bb4c3c97a7769ebe", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
@@ -30,7 +29,6 @@ db = load_db()
 def save_db():
     with open(DB_FILE, "w") as f: json.dump(db, f)
 
-# 🛑 SERVER PING (Always Awake)
 def keep_awake():
     while True:
         time.sleep(120)
@@ -41,7 +39,6 @@ threading.Thread(target=keep_awake, daemon=True).start()
 @app.route("/api/ping", methods=["GET"])
 def ping(): return "Alive"
 
-# 🔄 BACKGROUND ORDER SYNC (Refunds & Status Updates)
 def background_order_sync():
     while True:
         time.sleep(15)
@@ -76,13 +73,12 @@ def background_order_sync():
 
 threading.Thread(target=background_order_sync, daemon=True).start()
 
-# 🤖 TELEGRAM BOT POLLING
 def poll_telegram(p_id):
     bot_token = PANELS[p_id]["bot"]
     offset = 0
     while True:
         try:
-            res = requests.get(f"https://api.telegram.org/bot{bot_token}/getUpdates?offset={offset}&timeout=10").json()
+            res = requests.get(f"https://api.telegram.org/bot{bot_token}/getUpdates?offset={offset}&timeout=5").json()
             for update in res.get('result', []):
                 offset = update['update_id'] + 1
                 
@@ -90,10 +86,9 @@ def poll_telegram(p_id):
                     msg_text = update['message']['text']
                     chat_id = update['message']['chat']['id']
                     
-                    # 🛠️ ADMIN BOT COMMANDS
                     if msg_text == '/start':
                         markup = {"keyboard": [[{"text": "/users"}, {"text": "/help_commands"}]], "resize_keyboard": True}
-                        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "👑 Welcome Boss! System active.", "reply_markup": markup})
+                        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "👑 Welcome Admin! System active.", "reply_markup": markup})
                     
                     elif msg_text == '/help_commands':
                         txt = "🛠️ *VIP COMMANDS*\n\n`/users` - List all users\n`/appinfo` - View app stats\n`/setqr <url>` - Change QR image\n`/discount <email> <time> <unit> <percent>`\n`/discountall <time> <unit> <percent> <reason>`\n`/broadcast <msg>` - Send mail to everyone\n`/reply <email> <msg>` - Reply to specific user"
@@ -119,31 +114,38 @@ def poll_telegram(p_id):
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": list_msg, "reply_markup": markup})
                     
                     elif msg_text.startswith('/reply '):
-                        parts = msg_text.split(' ', 2)
-                        if len(parts) >= 3:
+                        try:
+                            parts = msg_text.split(' ', 2)
                             target_email = parts[1].strip()
                             reply_msg = parts[2].strip()
                             if target_email not in db['mails'][p_id]: db['mails'][p_id][target_email] = []
                             db['mails'][p_id][target_email].append({"from": "admin", "msg": reply_msg, "read": False})
                             save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Reply sent successfully to user {target_email}!"})
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Reply sent to {target_email}!"})
+                        except:
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Format Error. Use: `/reply user@email.com message`", "parse_mode": "Markdown"})
 
                     elif msg_text.startswith('/setqr '):
-                        new_url = msg_text.replace('/setqr ', '').strip()
-                        db['config'][f"qr_{p_id}"] = new_url
-                        save_db()
-                        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ QR Code updated successfully for Panel {p_id}!"})
+                        try:
+                            new_url = msg_text.replace('/setqr ', '').strip()
+                            db['config'][f"qr_{p_id}"] = new_url
+                            save_db()
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ QR Code updated successfully for Panel {p_id}!"})
+                        except: pass
 
                     elif msg_text.startswith('/broadcast '):
-                        msg = msg_text.replace('/broadcast ', '').strip()
-                        count = 0
-                        for u_name, u_details in db['users'][p_id].items():
-                            em = u_details['email']
-                            if em not in db['mails'][p_id]: db['mails'][p_id][em] = []
-                            db['mails'][p_id][em].append({"from": "admin", "msg": msg, "read": False})
-                            count += 1
-                        save_db()
-                        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Broadcast sent to {count} users!"})
+                        try:
+                            msg = msg_text.replace('/broadcast ', '').strip()
+                            count = 0
+                            for u_name, u_details in db['users'][p_id].items():
+                                em = u_details['email']
+                                if em not in db['mails'][p_id]: db['mails'][p_id][em] = []
+                                db['mails'][p_id][em].append({"from": "admin", "msg": msg, "read": False})
+                                count += 1
+                            save_db()
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Broadcast sent to {count} users!"})
+                        except:
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Error in broadcast format."})
 
                     elif msg_text.startswith('/discountall '):
                         try:
@@ -170,7 +172,7 @@ def poll_telegram(p_id):
                             save_db()
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ {perc}% Global Discount applied for {t_val} {t_unit}!\nReason sent: {reason}"})
                         except Exception as e:
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Error. Use format: /discountall <time> <unit> <percent> <reason>\nExample: /discountall 1 day 20 Happy Eid"})
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Format Error. Use: `/discountall 1 day 20 Eid Mubarak`", "parse_mode": "Markdown"})
 
                     elif msg_text.startswith('/discount '):
                         try:
@@ -194,9 +196,8 @@ def poll_telegram(p_id):
                             save_db()
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ {perc}% Discount given to {em} for {t_val} {t_unit}!"})
                         except Exception as e:
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Error. Use format: /discount <email> <time> <unit> <percent>\nExample: /discount user@mail.com 10 min 20"})
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Format Error. Use: `/discount user@mail.com 10 min 20`", "parse_mode": "Markdown"})
 
-                # 🖲️ INLINE BUTTON ACTIONS (Approve, Reject, Block, Profiles)
                 if 'callback_query' in update:
                     data = update['callback_query']['data']
                     msg = update['callback_query']['message']
@@ -286,7 +287,6 @@ def poll_telegram(p_id):
 threading.Thread(target=poll_telegram, args=("1",), daemon=True).start()
 threading.Thread(target=poll_telegram, args=("2",), daemon=True).start()
 
-# 🌐 FLASK API ROUTES
 
 @app.route("/api/signup", methods=["POST"])
 def signup():
@@ -459,7 +459,6 @@ def sync():
         if m['from'] == 'admin': m['read'] = True
     if unread_admin_mails: save_db()
 
-    # SMART DISCOUNT CALCULATOR (Seconds, Mins, Hours, Days)
     active_discount = 0
     t_now = time.time()
     
