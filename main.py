@@ -16,12 +16,12 @@ def load_db():
                 if "panels" not in data:
                     data["panels"] = {
                         "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
-                        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "ac53a5c8d669a155fca7c70733ff77c1", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
+                        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "3e3ed3099b90f481aa88e85d692b67a3", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
                     }
                 else:
                     if "2" in data["panels"]:
                         data["panels"]["2"]["url"] = "https://wowsmmpanel.com/api/v2"
-                        data["panels"]["2"]["key"] = "ac53a5c8d669a155fca7c70733ff77c1"
+                        data["panels"]["2"]["key"] = "3e3ed3099b90f481aa88e85d692b67a3"
 
                 if "coupons" not in data: data["coupons"] = {}
                 if "mails" not in data: data["mails"] = {"1": {}, "2": {}}
@@ -34,7 +34,6 @@ def load_db():
                     }
                 if "discounts" not in data: data["discounts"] = {"users": {}, "all": {}}
                 
-                # Ensure panel structures exist in sub-dicts
                 for p_id in data["panels"]:
                     if p_id not in data["users"]: data["users"][p_id] = {}
                     if p_id not in data["balances"]: data["balances"][p_id] = {}
@@ -46,10 +45,9 @@ def load_db():
         except Exception as e: 
             pass
     
-    # Default initial DB
     default_panels = {
         "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
-        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "ac53a5c8d669a155fca7c70733ff77c1", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
+        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "3e3ed3099b90f481aa88e85d692b67a3", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
     }
     return {
         "panels": default_panels, "users": {"1": {}, "2": {}}, "balances": {"1": {}, "2": {}}, 
@@ -691,6 +689,21 @@ def send_mail():
     markup = {"inline_keyboard": [[{"text": "✉️ REPLY TO USER", "callback_data": f"replymail_{email}"}]]}
     requests.post(f"https://api.telegram.org/bot{db['panels'][p_id]['bot']}/sendMessage", json={"chat_id": db['panels'][p_id]['chat'], "text": text, "reply_markup": markup})
     return jsonify({"status": "success"})
+
+@app.route("/api/delete-mail", methods=["POST"])
+def delete_mail():
+    d = request.json
+    p_id = str(d.get('panel'))
+    email = d.get('email')
+    index = d.get('index')
+
+    if p_id in db['mails'] and email in db['mails'][p_id]:
+        if index is not None and 0 <= index < len(db['mails'][p_id][email]):
+            db['mails'][p_id][email].pop(index)
+            save_db()
+            return jsonify({"status": "success"})
+            
+    return jsonify({"error": "Failed"}), 400
 
 @app.route("/api/sync", methods=["POST"])
 def sync():
