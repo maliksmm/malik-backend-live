@@ -16,12 +16,12 @@ def load_db():
                 if "panels" not in data:
                     data["panels"] = {
                         "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
-                        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "5e4008b6be64d6c314388b0ab967c1c7", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
+                        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "ac53a5c8d669a155fca7c70733ff77c1", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
                     }
                 else:
                     if "2" in data["panels"]:
                         data["panels"]["2"]["url"] = "https://wowsmmpanel.com/api/v2"
-                        data["panels"]["2"]["key"] = "5e4008b6be64d6c314388b0ab967c1c7"
+                        data["panels"]["2"]["key"] = "ac53a5c8d669a155fca7c70733ff77c1"
 
                 if "coupons" not in data: data["coupons"] = {}
                 if "mails" not in data: data["mails"] = {"1": {}, "2": {}}
@@ -47,7 +47,7 @@ def load_db():
     
     default_panels = {
         "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
-        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "5e4008b6be64d6c314388b0ab967c1c7", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
+        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "ac53a5c8d669a155fca7c70733ff77c1", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
     }
     return {
         "panels": default_panels, "users": {"1": {}, "2": {}}, "balances": {"1": {}, "2": {}}, 
@@ -505,9 +505,14 @@ def get_services():
     p_id = str(request.json.get("panel"))
     if p_id not in db['panels']: return jsonify([])
     try:
-        res = requests.post(db['panels'][p_id]["url"], data={"key": db['panels'][p_id]["key"], "action": "services"}, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
-        return jsonify(res.json() if res.status_code == 200 else [])
-    except: return jsonify([])
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'}
+        res = requests.post(db['panels'][p_id]["url"], data={"key": db['panels'][p_id]["key"], "action": "services"}, headers=headers, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            return jsonify(data if isinstance(data, list) else [])
+        return jsonify([])
+    except: 
+        return jsonify([])
 
 @app.route("/api/add-funds", methods=["POST"])
 def add_funds():
