@@ -5,7 +5,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# 🛑 PANEL APIs (Panel 2 Updated with WOW SMM Panel)
+# 🛑 PANEL APIs
 PANELS = {
     "1": {"url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
     "2": {"url": "https://wowsmmpanel.com/api/v2", "key": "9ddd128b2174a854bb4c3c97a7769ebe", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
@@ -97,7 +97,7 @@ def poll_telegram(p_id):
                         requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "👑 Welcome Admin! Use the keyboard buttons or type commands to control the app.", "reply_markup": markup})
                     
                     elif msg_text == '/help_commands':
-                        txt = "🛠️ *ADMIN COMMANDS*\n\n`/users` - List all users\n`/appinfo` - View app stats\n`/setqr <url>` - Change app QR code image\n`/discount <email> <percent> <mins>` - Give user discount\n`/discountall <percent> <mins> <reason>` - Global discount\n`/broadcast <msg>` - Send mail to everyone\n`/reply <email> <msg>` - Reply to specific user"
+                        txt = "🛠️ *ADMIN COMMANDS*\n\n`/users` - List all users\n`/appinfo` - View app stats\n`/setqr <url>` - Change app QR code image\n`/discount <email> <time> <unit> <percent>`\n`/discountall <time> <unit> <percent> <reason>`\n`/broadcast <msg>` - Send mail to everyone\n`/reply <email> <msg>` - Reply to specific user"
                         requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": txt, "parse_mode": "Markdown"})
 
                     elif msg_text == '/appinfo':
@@ -146,35 +146,61 @@ def poll_telegram(p_id):
                         save_db()
                         requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Broadcast sent to {count} users!"})
 
+                    # 🎟️ ADVANCED GLOBAL DISCOUNT SYSTEM
                     elif msg_text.startswith('/discountall '):
                         try:
-                            parts = msg_text.split(' ', 3)
-                            perc, mins, reason = int(parts[1]), int(parts[2]), parts[3]
-                            db['discounts']['all'][p_id] = {"percent": perc, "exp": time.time() + (mins*60)}
+                            # Format: /discountall 1 day 20 Eid Special
+                            parts = msg_text.split(' ', 4)
+                            t_val = int(parts[1])
+                            t_unit = parts[2].lower()
+                            perc = int(parts[3])
+                            reason = parts[4] if len(parts) > 4 else "Special Offer"
+
+                            multiplier = 1
+                            if 'day' in t_unit or t_unit == 'd': multiplier = 86400
+                            elif 'hour' in t_unit or t_unit == 'h': multiplier = 3600
+                            elif 'min' in t_unit or t_unit == 'm': multiplier = 60
+                            elif 'sec' in t_unit or t_unit == 's': multiplier = 1
+
+                            duration = t_val * multiplier
+                            db['discounts']['all'][p_id] = {"percent": perc, "exp": time.time() + duration}
                             
-                            # Auto-Broadcast reason
+                            # Auto-Broadcast Reason to all users' mailbox
                             for u_name, u_details in db['users'][p_id].items():
                                 em = u_details['email']
-                                bmsg = f"Hey dear {u_name}, {reason}! Enjoy the {perc}% discount valid for {mins} minutes!"
+                                bmsg = f"Hey dear {u_name}, {reason}! Enjoy the {perc}% discount valid for {t_val} {t_unit}!"
                                 if em not in db['mails'][p_id]: db['mails'][p_id][em] = []
                                 db['mails'][p_id][em].append({"from": "admin", "msg": bmsg, "read": False})
                             save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ {perc}% Global Discount applied for {mins} mins!\nReason sent: {reason}"})
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ {perc}% Global Discount applied for {t_val} {t_unit}!\nReason sent: {reason}"})
                         except Exception as e:
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Error. Use format: /discountall <percent> <mins> <reason>"})
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Error. Use format: /discountall <time> <unit> <percent> <reason>\nExample: /discountall 1 day 20 Eid Mubarak"})
 
+                    # 🎟️ ADVANCED SINGLE USER DISCOUNT SYSTEM
                     elif msg_text.startswith('/discount '):
                         try:
+                            # Format: /discount user@gmail.com 10 min 20
                             parts = msg_text.split(' ')
-                            em, perc, mins = parts[1], int(parts[2]), int(parts[3])
-                            db['discounts']['users'][p_id][em] = {"percent": perc, "exp": time.time() + (mins*60)}
+                            em = parts[1]
+                            t_val = int(parts[2])
+                            t_unit = parts[3].lower()
+                            perc = int(parts[4])
+
+                            multiplier = 1
+                            if 'day' in t_unit or t_unit == 'd': multiplier = 86400
+                            elif 'hour' in t_unit or t_unit == 'h': multiplier = 3600
+                            elif 'min' in t_unit or t_unit == 'm': multiplier = 60
+                            elif 'sec' in t_unit or t_unit == 's': multiplier = 1
+
+                            duration = t_val * multiplier
+                            db['discounts']['users'][p_id][em] = {"percent": perc, "exp": time.time() + duration}
                             
                             if em not in db['mails'][p_id]: db['mails'][p_id][em] = []
-                            db['mails'][p_id][em].append({"from": "admin", "msg": f"🎁 Special gift only for you! Enjoy a {perc}% discount valid for {mins} mins.", "read": False})
+                            db['mails'][p_id][em].append({"from": "admin", "msg": f"🎁 Special gift only for you! Enjoy a {perc}% discount valid for {t_val} {t_unit}.", "read": False})
                             save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ {perc}% Discount given to {em} for {mins} mins!"})
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ {perc}% Discount given to {em} for {t_val} {t_unit}!"})
                         except Exception as e:
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Error. Use format: /discount <email> <percent> <mins>"})
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Error. Use format: /discount <email> <time> <unit> <percent>\nExample: /discount user@mail.com 10 min 20"})
 
                 # 🖲️ INLINE BUTTON ACTIONS (Block, Approve, Reject, Info)
                 if 'callback_query' in update:
@@ -271,7 +297,10 @@ threading.Thread(target=poll_telegram, args=("2",), daemon=True).start()
 @app.route("/api/signup", methods=["POST"])
 def signup():
     d = request.json
-    p_id, user, email, pwd = str(d['panel']), d['username'].lower().strip(), d['email'].lower().strip(), d['pass']
+    p_id = str(d['panel'])
+    user = d['username'].lower().strip()
+    email = d['email'].lower().strip()
+    pwd = d['pass'].strip() # Fixed Login bug (matching exact password)
     ref_by = d.get('ref', '')
     
     if email in db['blocked'][p_id]: return jsonify({"error": "Blocked"}), 403
@@ -291,7 +320,10 @@ def signup():
 @app.route("/api/login", methods=["POST"])
 def login():
     d = request.json
-    p_id, user, pwd = str(d['panel']), d['username'].lower().strip(), d['pass']
+    p_id = str(d['panel'])
+    user = d['username'].lower().strip()
+    pwd = d['pass'].strip() # Fixed Login bug
+    
     if user not in db['users'][p_id] or db['users'][p_id][user]["password"] != pwd:
         return jsonify({"error": "Invalid Username or Password!"}), 400
     email = db['users'][p_id][user]["email"]
@@ -301,7 +333,7 @@ def login():
 @app.route("/api/change-password", methods=["POST"])
 def change_pass():
     d = request.json
-    p_id, email, old, new = str(d['panel']), d['email'], d['old'], d['new']
+    p_id, email, old, new = str(d['panel']), d['email'], d['old'].strip(), d['new'].strip()
     for u, details in db['users'][p_id].items():
         if details['email'] == email:
             if details['password'] == old:
@@ -433,7 +465,7 @@ def sync():
         if m['from'] == 'admin': m['read'] = True
     if unread_admin_mails: save_db()
 
-    # SMART DISCOUNT CALCULATOR
+    # SMART DISCOUNT CALCULATOR (Seconds, Mins, Hours, Days)
     active_discount = 0
     t_now = time.time()
     
@@ -458,4 +490,3 @@ def sync():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
-
