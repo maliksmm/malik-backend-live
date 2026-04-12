@@ -734,5 +734,115 @@ def sync():
         "config": db['config'], "discount": active_discount
     })
 
+# ======== FULL SMM API v2 ENDPOINT FOR RESELLERS ========
+@app.route("/api/v2", methods=["GET", "POST"])
+def smm_api():
+    if request.is_json:
+        data = request.json
+    else:
+        data = request.values.to_dict()
+        
+    api_key = data.get("key")
+    action = data.get("action")
+    
+    if not api_key:
+        return jsonify({"error": "API key required"}), 400
+        
+    target_user = None
+    target_email = None
+    target_pid = None
+    
+    for p_id, users in db['users'].items():
+        for u_name, u_details in users.items():
+            if u_details.get("api_key") == api_key:
+                target_user = u_name
+                target_email = u_details["email"]
+                target_pid = p_id
+                break
+        if target_user: break
+        
+    if not target_user:
+        return jsonify({"error": "Invalid API key"}), 400
+        
+    p_data = db['panels'][target_pid]
+    
+    if action == "balance":
+        bal = db['balances'][target_pid].get(target_email, 0.0)
+        return jsonify({"balance": str(round(bal, 4)), "currency": "INR"})
+        
+    elif action == "services":
+        try:
+            res = requests.post(p_data["url"], data={"key": p_data["key"], "action": "services"}, timeout=10).json()
+            for s in res:
+                s['rate'] = str(float(s['rate']) * 2)
+            return jsonify(res)
+        except:
+            return jsonify({"error": "Provider error"})
+            
+    elif action == "add":
+        s_id = data.get("service")
+        link = data.get("link")
+        qty = data.get("quantity")
+        
+        if not s_id or not link or not qty:
+            return jsonify({"error": "Incorrect request"}), 400
+            
+        try:
+            qty = int(qty)
+        except:
+            return jsonify({"error": "Invalid quantity"}), 400
+            
+        try:
+            services = requests.post(p_data["url"], data={"key": p_data["key"], "action": "services"}, timeout=10).json()
+            service_obj = next((s for s in services if str(s['service']) == str(s_id)), None)
+            if not service_obj:
+                return jsonify({"error": "Service not found"}), 400
+                
+            rate = float(service_obj['rate']) * 2
+            
+            discount = 0
+            t_now = time.time()
+            if db['discounts']['all'][target_pid]['exp'] > t_now: discount = db['discounts']['all'][target_pid]['percent']
+            if target_email in db['discounts']['users'][target_pid]:
+                if db['discounts']['users'][target_pid][target_email]['exp'] > t_now and db['discounts']['users'][target_pid][target_email]['percent'] > discount:
+                    discount = db['discounts']['users'][target_pid][target_email]['percent']
+            
+            final_rate = rate * (1 - discount/100)
+            charge = (qty / 1000.0) * final_rate
+            
+            if db['balances'][target_pid].get(target_email, 0.0) < charge:
+                return jsonify({"error": "Not enough funds on balance"}), 400
+                
+            res = requests.post(p_data["url"], data={"key": p_data["key"], "action": "add", "service": s_id, "link": link, "quantity": qty}, timeout=10).json()
+            if "error" in res:
+                return jsonify({"error": res["error"]}), 400
+                
+            order_id = res.get("order")
+            
+            db['balances'][target_pid][target_email] -= charge
+            db['orders'].append({"email": target_email, "panel": target_pid, "id": order_id, "name": service_obj['name'], "qty": qty, "charge": charge, "status": "Pending", "refunded": False, "username": target_user})
+            save_db()
+            
+            msg = f"🤖 ⍟ API ORDER RECEIVED ({p_data['name']}) ⍟ 🤖\n\n👤 User: {target_user}\n🛒 Service: {service_obj['name'][:30]}...\n🆔 ID: {s_id}\n🔗 Link: {link}\n🔢 Qty: {qty}\n💸 Amt: ₹{charge}\n🟡 Status: Pending"
+            requests.post(f"https://api.telegram.org/bot{p_data['bot']}/sendMessage", json={"chat_id": p_data['chat'], "text": msg})
+            
+            return jsonify({"order": order_id})
+            
+        except Exception as e:
+            return jsonify({"error": "Order failed"}), 500
+            
+    elif action == "status":
+        order_id = data.get("order")
+        if not order_id:
+            return jsonify({"error": "Order ID required"}), 400
+        try:
+            res = requests.post(p_data["url"], data={"key": p_data["key"], "action": "status", "order": order_id}, timeout=10).json()
+            return jsonify(res)
+        except:
+            return jsonify({"error": "Status fetch failed"}), 500
+            
+    else:
+        return jsonify({"error": "Incorrect action"}), 400
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
