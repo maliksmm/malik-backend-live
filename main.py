@@ -16,12 +16,12 @@ def load_db():
                 if "panels" not in data:
                     data["panels"] = {
                         "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
-                        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "3e3ed3099b90f481aa88e85d692b67a3", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
+                        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "ac53a5c8d669a155fca7c70733ff77c1", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
                     }
                 else:
                     if "2" in data["panels"]:
                         data["panels"]["2"]["url"] = "https://wowsmmpanel.com/api/v2"
-                        data["panels"]["2"]["key"] = "3e3ed3099b90f481aa88e85d692b67a3"
+                        data["panels"]["2"]["key"] = "ac53a5c8d669a155fca7c70733ff77c1"
 
                 if "coupons" not in data: data["coupons"] = {}
                 if "mails" not in data: data["mails"] = {"1": {}, "2": {}}
@@ -30,8 +30,16 @@ def load_db():
                         "qr_1": "./AccountQRCodeJ&K Bank - 6648_DARK_THEME (13).png", 
                         "qr_2": "./AccountQRCodeJ&K Bank - 6648_DARK_THEME (13).png",
                         "socials": {"tg": "https://t.me/zr3v_x", "yt": "https://youtube.com/@z3rv_x?si=ayQnR40t-521AFTb", "ig": "", "wp": ""},
-                        "mail_theme": "1"
+                        "mail_theme": "1",
+                        "app_name": "MALIK PROXY SMM",
+                        "log_system": "1",
+                        "auto_system": False
                     }
+                else:
+                    if "app_name" not in data["config"]: data["config"]["app_name"] = "MALIK PROXY SMM"
+                    if "log_system" not in data["config"]: data["config"]["log_system"] = "1"
+                    if "auto_system" not in data["config"]: data["config"]["auto_system"] = False
+
                 if "discounts" not in data: data["discounts"] = {"users": {}, "all": {}}
                 
                 for p_id in data["panels"]:
@@ -47,7 +55,7 @@ def load_db():
     
     default_panels = {
         "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
-        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "3e3ed3099b90f481aa88e85d692b67a3", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
+        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "ac53a5c8d669a155fca7c70733ff77c1", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
     }
     return {
         "panels": default_panels, "users": {"1": {}, "2": {}}, "balances": {"1": {}, "2": {}}, 
@@ -57,7 +65,10 @@ def load_db():
             "qr_1": "./AccountQRCodeJ&K Bank - 6648_DARK_THEME (13).png", 
             "qr_2": "./AccountQRCodeJ&K Bank - 6648_DARK_THEME (13).png",
             "socials": {"tg": "https://t.me/zr3v_x", "yt": "https://youtube.com/@z3rv_x?si=ayQnR40t-521AFTb", "ig": "", "wp": ""},
-            "mail_theme": "1"
+            "mail_theme": "1",
+            "app_name": "MALIK PROXY SMM",
+            "log_system": "1",
+            "auto_system": False
         },
         "discounts": {"users": {"1": {}, "2": {}}, "all": {"1": {"percent": 0, "exp": 0}, "2": {"percent": 0, "exp": 0}}}
     }
@@ -132,8 +143,30 @@ def poll_telegram(p_id):
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"👑 Welcome Admin! Connected to {db['panels'][p_id]['name']}.", "reply_markup": markup})
                         
                         elif msg_text == '/help_commands':
-                            txt = "🛠️ *VIP COMMANDS*\n\n`/users` - List users\n`/appinfo` - App stats\n`/setqr <url>` - Set QR\n`/discount <email> <time> <unit> <percent>`\n`/discountall <time> <unit> <percent> <reason>`\n`/broadcast <msg>`\n`/reply <email> <msg>`\n\n*NEW COMMANDS:*\n`/addcoupon <code> <amount>`\n`/changepanel <new_api_url> <new_api_key>`\n`/addpanel <id> <name> <color> <api_url> <api_key> <bot_token> <chat_id>`\n`/removepanel <id>`\n`/setig <url>`, `/setyt <url>`, `/setwp <url>`, `/settg <url>`\n`/mailtheme <1/2/3>`\n`/api_approve <email>`, `/api_reject <email>`"
+                            txt = "🛠️ *VIP COMMANDS*\n\n`/users` - List users\n`/appinfo` - App stats\n`/setqr <url>` - Set QR\n`/discount <email> <percent>`\n`/broadcast <msg>`\n`/reply <email> <msg>`\n\n*NEW SUPER COMMANDS:*\n`/changename <New_Name>` - Update App Name Globally\n`/logsystem 1` - Panel first, then Login\n`/logsystem 2` - Login first, then Panel\n`/autosystem on` - Auto-Approve API Keys\n`/autosystem off` - Manual Approve\n`/addpanel <id> <name> <color> <url> <key> <bot> <chat>`\n`/removepanel <id>`"
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": txt, "parse_mode": "Markdown"})
+
+                        elif msg_text.startswith('/changename '):
+                            new_name = msg_text.replace('/changename ', '').strip()
+                            db['config']['app_name'] = new_name
+                            save_db()
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ App Name changed globally to: {new_name}"})
+
+                        elif msg_text == '/autosystem on':
+                            db['config']['auto_system'] = True
+                            save_db()
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"⚡ Auto-System is now ON. API Requests will be auto-approved."})
+
+                        elif msg_text == '/autosystem off':
+                            db['config']['auto_system'] = False
+                            save_db()
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"🛑 Auto-System is now OFF. Manual approval required."})
+
+                        elif msg_text in ['/logsystem 1', '/logsystem 2']:
+                            sys_num = msg_text.split(' ')[1]
+                            db['config']['log_system'] = sys_num
+                            save_db()
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Login System changed to Type {sys_num}!"})
 
                         elif msg_text.startswith('/addcoupon '):
                             parts = msg_text.split(' ')
@@ -142,15 +175,6 @@ def poll_telegram(p_id):
                             db['coupons'][code] = amt
                             save_db()
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Coupon {code} created for ₹{amt}!"})
-
-                        elif msg_text.startswith('/changepanel '):
-                            parts = msg_text.split(' ')
-                            new_url = parts[1].strip()
-                            new_key = parts[2].strip()
-                            db['panels'][p_id]['url'] = new_url
-                            db['panels'][p_id]['key'] = new_key
-                            save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Connected Panel API updated successfully!"})
 
                         elif msg_text.startswith('/addpanel '):
                             parts = msg_text.split(' ')
@@ -186,14 +210,7 @@ def poll_telegram(p_id):
                         elif msg_text.startswith('/settg '):
                             db['config']['socials']['tg'] = msg_text.replace('/settg ', '').strip()
                             save_db(); requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "✅ TG Link Updated"})
-                        elif msg_text.startswith('/setwp '):
-                            db['config']['socials']['wp'] = msg_text.replace('/setwp ', '').strip()
-                            save_db(); requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "✅ WP Link Updated"})
                         
-                        elif msg_text.startswith('/mailtheme '):
-                            db['config']['mail_theme'] = msg_text.replace('/mailtheme ', '').strip()
-                            save_db(); requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "✅ Mail Theme Updated"})
-
                         elif msg_text == '/appinfo':
                             total_u = len(db['users'][p_id])
                             total_bal = sum(db['balances'][p_id].values())
@@ -222,12 +239,6 @@ def poll_telegram(p_id):
                             save_db()
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Reply sent to {target_email}!"})
 
-                        elif msg_text.startswith('/setqr '):
-                            new_url = msg_text.replace('/setqr ', '').strip()
-                            db['config'][f"qr_{p_id}"] = new_url
-                            save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ QR Code updated successfully for {db['panels'][p_id]['name']}!"})
-
                         elif msg_text.startswith('/broadcast '):
                             msg = msg_text.replace('/broadcast ', '').strip()
                             count = 0
@@ -238,38 +249,6 @@ def poll_telegram(p_id):
                                 count += 1
                             save_db()
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Broadcast sent to {count} users!"})
-
-                        elif msg_text.startswith('/discountall '):
-                            parts = msg_text.split(' ', 4)
-                            t_val, t_unit, perc = int(parts[1]), parts[2].lower(), int(parts[3])
-                            reason = parts[4] if len(parts) > 4 else "Special Offer"
-                            multiplier = 1
-                            if 'day' in t_unit or t_unit == 'd': multiplier = 86400
-                            elif 'hour' in t_unit or t_unit == 'h': multiplier = 3600
-                            elif 'min' in t_unit or t_unit == 'm': multiplier = 60
-                            
-                            db['discounts']['all'][p_id] = {"percent": perc, "exp": time.time() + (t_val * multiplier)}
-                            for u_name, u_details in db['users'][p_id].items():
-                                em = u_details['email']
-                                bmsg = f"Hey dear {u_name}, {reason}! Enjoy the {perc}% discount valid for {t_val} {t_unit}!"
-                                if em not in db['mails'][p_id]: db['mails'][p_id][em] = []
-                                db['mails'][p_id][em].append({"from": "admin", "msg": bmsg, "read": False})
-                            save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ {perc}% Global Discount applied!"})
-
-                        elif msg_text.startswith('/discount '):
-                            parts = msg_text.split(' ')
-                            em, t_val, t_unit, perc = parts[1], int(parts[2]), parts[3].lower(), int(parts[4])
-                            multiplier = 1
-                            if 'day' in t_unit or t_unit == 'd': multiplier = 86400
-                            elif 'hour' in t_unit or t_unit == 'h': multiplier = 3600
-                            elif 'min' in t_unit or t_unit == 'm': multiplier = 60
-                            
-                            db['discounts']['users'][p_id][em] = {"percent": perc, "exp": time.time() + (t_val * multiplier)}
-                            if em not in db['mails'][p_id]: db['mails'][p_id][em] = []
-                            db['mails'][p_id][em].append({"from": "admin", "msg": f"🎁 Special gift only for you! Enjoy a {perc}% discount valid for {t_val} {t_unit}.", "read": False})
-                            save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ {perc}% Discount given to {em}!"})
 
                         elif msg_text.startswith('/api_approve '):
                             em = msg_text.replace('/api_approve ', '').strip()
@@ -429,7 +408,7 @@ for pid in db['panels']:
 @app.route("/api/init-app", methods=["GET"])
 def init_app():
     panels_list = [{"id": k, "name": v["name"], "color": v.get("color", "#00f3ff")} for k, v in db['panels'].items()]
-    return jsonify({"panels": panels_list})
+    return jsonify({"panels": panels_list, "config": db.get("config", {})})
 
 @app.route("/api/signup", methods=["POST"])
 def signup():
@@ -585,12 +564,20 @@ def req_api():
     p_id, email = str(d['panel']), d['email']
     for u, details in db['users'][p_id].items():
         if details['email'] == email:
-            details['api_req_pending'] = True
-            save_db()
-            text = f"🔑 ⍟ API KEY REQUEST ⍟ 🔑\n\n👤 User: {email}\n🎛️ Panel: {db['panels'][p_id]['name']}"
-            markup = {"inline_keyboard": [[{"text": "✅ APPROVE", "callback_data": f"apiapp_{email}"}, {"text": "❌ REJECT", "callback_data": f"apirej_{email}"}]]}
-            requests.post(f"https://api.telegram.org/bot{db['panels'][p_id]['bot']}/sendMessage", json={"chat_id": db['panels'][p_id]['chat'], "text": text, "reply_markup": markup})
-            return jsonify({"status": "success"})
+            if db['config'].get('auto_system', False):
+                details['api_key'] = 'API_' + email.split('@')[0].upper()[:10] + str(time.time()).replace('.','')[-5:]
+                details['api_req_pending'] = False
+                if email not in db['mails'][p_id]: db['mails'][p_id][email] = []
+                db['mails'][p_id][email].append({"from": "admin", "msg": "✅ Your API Key Request has been AUTO-APPROVED! Check Settings.", "read": False})
+                save_db()
+                return jsonify({"status": "success"})
+            else:
+                details['api_req_pending'] = True
+                save_db()
+                text = f"🔑 ⍟ API KEY REQUEST ⍟ 🔑\n\n👤 User: {email}\n🎛️ Panel: {db['panels'][p_id]['name']}"
+                markup = {"inline_keyboard": [[{"text": "✅ APPROVE", "callback_data": f"apiapp_{email}"}, {"text": "❌ REJECT", "callback_data": f"apirej_{email}"}]]}
+                requests.post(f"https://api.telegram.org/bot{db['panels'][p_id]['bot']}/sendMessage", json={"chat_id": db['panels'][p_id]['chat'], "text": text, "reply_markup": markup})
+                return jsonify({"status": "success"})
     return jsonify({"error": "User not found!"}), 400
 
 @app.route("/api/reset-api", methods=["POST"])
@@ -703,6 +690,19 @@ def delete_mail():
             save_db()
             return jsonify({"status": "success"})
             
+    return jsonify({"error": "Failed"}), 400
+
+@app.route("/api/clear-all-mails", methods=["POST"])
+def clear_all_mails():
+    d = request.json
+    p_id = str(d.get('panel'))
+    email = d.get('email')
+    
+    if p_id in db['mails'] and email in db['mails'][p_id]:
+        db['mails'][p_id][email] = []
+        save_db()
+        return jsonify({"status": "success"})
+        
     return jsonify({"error": "Failed"}), 400
 
 @app.route("/api/sync", methods=["POST"])
