@@ -1,3 +1,4 @@
+
 import json, os, threading, time, requests, re, random, string
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -30,8 +31,6 @@ def generate_api_key():
 
 def load_db():
     data = None
-    
-    # 1. Pehle MongoDB se try karega
     if USE_MONGO:
         try:
             doc = db_collection.find_one({"_id": "core_db"})
@@ -39,7 +38,6 @@ def load_db():
                 data = doc["data"]
         except: pass
 
-    # 2. Agar Mongo URL nahi hai, toh JSON file se try karega
     if data is None and os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r") as f:
@@ -88,7 +86,6 @@ def load_db():
         except Exception as e: 
             pass
             
-    # Default Fallback (Pehli baar app on hone ke liye)
     default_panels = {
         "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
         "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "ac53a5c8d669a155fca7c70733ff77c1", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
@@ -113,13 +110,10 @@ db = load_db()
 active_bots = {}
 
 def save_db():
-    # 1. Pehle MongoDB mein save karega (LifeTime ke liye)
     if USE_MONGO:
         try:
             db_collection.update_one({"_id": "core_db"}, {"$set": {"data": db}}, upsert=True)
         except: pass
-        
-    # 2. Local backup bhi banayega just in case
     try:
         with open(DB_FILE, "w") as f: json.dump(db, f)
     except: pass
@@ -178,11 +172,11 @@ def poll_telegram(p_id):
             for update in res.get('result', []):
                 offset = update['update_id'] + 1
                 
-                try:
-                    if 'message' in update and 'text' in update['message']:
-                        msg_text = update['message']['text']
-                        chat_id = update['message']['chat']['id']
-                        
+                if 'message' in update and 'text' in update['message']:
+                    msg_text = update['message']['text']
+                    chat_id = update['message']['chat']['id']
+                    
+                    try:
                         if msg_text == '/start':
                             markup = {"keyboard": [[{"text": "/users"}, {"text": "/help_commands"}]], "resize_keyboard": True}
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"👑 Welcome Admin! Connected to {db['panels'][p_id]['name']}.", "reply_markup": markup})
@@ -300,6 +294,12 @@ def poll_telegram(p_id):
                             save_db()
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Reply sent to {target_email}!"})
 
+                        elif msg_text.startswith('/setqr '):
+                            new_url = msg_text.replace('/setqr ', '').strip()
+                            db['config'][f"qr_{p_id}"] = new_url
+                            save_db()
+                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ QR Code updated successfully for {db['panels'][p_id]['name']}!"})
+
                         elif msg_text.startswith('/broadcast '):
                             msg = msg_text.replace('/broadcast ', '').strip()
                             count = 0
@@ -331,15 +331,11 @@ def poll_telegram(p_id):
 
                         elif msg_text.startswith('/discount '):
                             parts = msg_text.split(' ')
-                            em, t_val, t_unit, perc = parts[1], int(parts[2]), parts[3].lower(), int(parts[4])
-                            multiplier = 1
-                            if 'day' in t_unit or t_unit == 'd': multiplier = 86400
-                            elif 'hour' in t_unit or t_unit == 'h': multiplier = 3600
-                            elif 'min' in t_unit or t_unit == 'm': multiplier = 60
-                            
-                            db['discounts']['users'][p_id][em] = {"percent": perc, "exp": time.time() + (t_val * multiplier)}
+                            em = parts[1].strip()
+                            perc = int(parts[2].strip())
+                            db['discounts']['users'][p_id][em] = {"percent": perc, "exp": time.time() + (30 * 86400)}
                             if em not in db['mails'][p_id]: db['mails'][p_id][em] = []
-                            db['mails'][p_id][em].append({"from": "admin", "msg": f"🎁 Special gift only for you! Enjoy a {perc}% discount valid for {t_val} {t_unit}.", "read": False})
+                            db['mails'][p_id][em].append({"from": "admin", "msg": f"🎁 Special gift only for you! Enjoy a {perc}% discount.", "read": False})
                             save_db()
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ {perc}% Discount given to {em}!"})
 
@@ -372,8 +368,8 @@ def poll_telegram(p_id):
                                 save_db()
                                 requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"❌ API Rejected for {em}"})
 
-                except Exception as loop_e:
-                    pass
+                    except Exception as cmd_e:
+                        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"⚠️ Syntax Error in command. Plz check /help_commands and try again. Error: {str(cmd_e)}"})
 
                 try:
                     if 'callback_query' in update:
