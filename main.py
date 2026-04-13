@@ -1,9 +1,27 @@
 import json, os, threading, time, requests, re, random, string
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from pymongo import MongoClient
 
 app = Flask(__name__)
 CORS(app)
+
+# =========================================================================
+# 🔴 MONGODB LIFETIME DATA ENGINE (Data amar rakhne ke liye) 🔴
+# Jab account bana le, toh "USERNAME" aur "PASSWORD" hata kar apna URL yahan daal dena.
+# Jab tak nahi daalega, app aaram se purane JSON system par safe chalega!
+MONGO_URI = "mongodb+srv://USERNAME:PASSWORD@cluster0.mongodb.net/?retryWrites=true&w=majority"
+# =========================================================================
+
+USE_MONGO = False
+try:
+    if "mongodb+srv" in MONGO_URI and "USERNAME" not in MONGO_URI:
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        mongo_db = client["malik_smm_pro"]
+        db_collection = mongo_db["database"]
+        USE_MONGO = True
+except:
+    pass
 
 DB_FILE = "malik_db.json"
 
@@ -11,47 +29,66 @@ def generate_api_key():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=15))
 
 def load_db():
-    if os.path.exists(DB_FILE):
+    data = None
+    
+    # 1. Pehle MongoDB se try karega
+    if USE_MONGO:
+        try:
+            doc = db_collection.find_one({"_id": "core_db"})
+            if doc and "data" in doc:
+                data = doc["data"]
+        except: pass
+
+    # 2. Agar Mongo URL nahi hai, toh JSON file se try karega
+    if data is None and os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r") as f:
                 data = json.load(f)
-                
-                if "panels" not in data:
-                    data["panels"] = {
-                        "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
-                        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "ac53a5c8d669a155fca7c70733ff77c1", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
-                    }
+        except: pass
 
-                if "coupons" not in data: data["coupons"] = {}
-                if "mails" not in data: data["mails"] = {"1": {}, "2": {}}
-                if "config" not in data: 
-                    data["config"] = {
-                        "qr_1": "./AccountQRCodeJ&K Bank - 6648_DARK_THEME (13).png", 
-                        "qr_2": "./AccountQRCodeJ&K Bank - 6648_DARK_THEME (13).png",
-                        "socials": {"tg": "https://t.me/zr3v_x", "yt": "https://youtube.com/@z3rv_x?si=ayQnR40t-521AFTb", "ig": "", "wp": ""},
-                        "mail_theme": "1",
-                        "app_name": "MALIK PROXY SMM",
-                        "log_system": "1",
-                        "auto_system": False
-                    }
-                else:
-                    if "app_name" not in data["config"]: data["config"]["app_name"] = "MALIK PROXY SMM"
-                    if "log_system" not in data["config"]: data["config"]["log_system"] = "1"
-                    if "auto_system" not in data["config"]: data["config"]["auto_system"] = False
+    if data is not None:
+        try:
+            if "panels" not in data:
+                data["panels"] = {
+                    "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
+                    "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "ac53a5c8d669a155fca7c70733ff77c1", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
+                }
+            else:
+                if "2" in data["panels"]:
+                    data["panels"]["2"]["url"] = "https://wowsmmpanel.com/api/v2"
+                    data["panels"]["2"]["key"] = "ac53a5c8d669a155fca7c70733ff77c1"
 
-                if "discounts" not in data: data["discounts"] = {"users": {}, "all": {}}
-                
-                for p_id in data["panels"]:
-                    if p_id not in data["users"]: data["users"][p_id] = {}
-                    if p_id not in data["balances"]: data["balances"][p_id] = {}
-                    if p_id not in data["blocked"]: data["blocked"][p_id] = []
-                    if p_id not in data["mails"]: data["mails"][p_id] = {}
-                    if p_id not in data["discounts"]["users"]: data["discounts"]["users"][p_id] = {}
-                    if p_id not in data["discounts"]["all"]: data["discounts"]["all"][p_id] = {"percent": 0, "exp": 0}
-                return data
+            if "coupons" not in data: data["coupons"] = {}
+            if "mails" not in data: data["mails"] = {"1": {}, "2": {}}
+            if "config" not in data: 
+                data["config"] = {
+                    "qr_1": "./AccountQRCodeJ&K Bank - 6648_DARK_THEME (13).png", 
+                    "qr_2": "./AccountQRCodeJ&K Bank - 6648_DARK_THEME (13).png",
+                    "socials": {"tg": "https://t.me/zr3v_x", "yt": "https://youtube.com/@z3rv_x?si=ayQnR40t-521AFTb", "ig": "", "wp": ""},
+                    "mail_theme": "1",
+                    "app_name": "MALIK PROXY SMM",
+                    "log_system": "1",
+                    "auto_system": False
+                }
+            else:
+                if "app_name" not in data["config"]: data["config"]["app_name"] = "MALIK PROXY SMM"
+                if "log_system" not in data["config"]: data["config"]["log_system"] = "1"
+                if "auto_system" not in data["config"]: data["config"]["auto_system"] = False
+
+            if "discounts" not in data: data["discounts"] = {"users": {}, "all": {}}
+            
+            for p_id in data["panels"]:
+                if p_id not in data["users"]: data["users"][p_id] = {}
+                if p_id not in data["balances"]: data["balances"][p_id] = {}
+                if p_id not in data["blocked"]: data["blocked"][p_id] = []
+                if p_id not in data["mails"]: data["mails"][p_id] = {}
+                if p_id not in data["discounts"]["users"]: data["discounts"]["users"][p_id] = {}
+                if p_id not in data["discounts"]["all"]: data["discounts"]["all"][p_id] = {"percent": 0, "exp": 0}
+            return data
         except Exception as e: 
             pass
-    
+            
+    # Default Fallback (Pehli baar app on hone ke liye)
     default_panels = {
         "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
         "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "ac53a5c8d669a155fca7c70733ff77c1", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
@@ -76,7 +113,16 @@ db = load_db()
 active_bots = {}
 
 def save_db():
-    with open(DB_FILE, "w") as f: json.dump(db, f)
+    # 1. Pehle MongoDB mein save karega (LifeTime ke liye)
+    if USE_MONGO:
+        try:
+            db_collection.update_one({"_id": "core_db"}, {"$set": {"data": db}}, upsert=True)
+        except: pass
+        
+    # 2. Local backup bhi banayega just in case
+    try:
+        with open(DB_FILE, "w") as f: json.dump(db, f)
+    except: pass
 
 def keep_awake():
     while True:
@@ -253,12 +299,6 @@ def poll_telegram(p_id):
                             db['mails'][p_id][target_email].append({"from": "admin", "msg": reply_msg, "read": False})
                             save_db()
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Reply sent to {target_email}!"})
-
-                        elif msg_text.startswith('/setqr '):
-                            new_url = msg_text.replace('/setqr ', '').strip()
-                            db['config'][f"qr_{p_id}"] = new_url
-                            save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ QR Code updated successfully for {db['panels'][p_id]['name']}!"})
 
                         elif msg_text.startswith('/broadcast '):
                             msg = msg_text.replace('/broadcast ', '').strip()
@@ -899,3 +939,4 @@ def smm_api():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
+
