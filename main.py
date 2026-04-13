@@ -1,4 +1,4 @@
-import json, os, threading, time, requests, re
+import json, os, threading, time, requests, re, random, string
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
@@ -6,6 +6,9 @@ app = Flask(__name__)
 CORS(app)
 
 DB_FILE = "malik_db.json"
+
+def generate_api_key():
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=15))
 
 def load_db():
     if os.path.exists(DB_FILE):
@@ -16,12 +19,8 @@ def load_db():
                 if "panels" not in data:
                     data["panels"] = {
                         "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
-                        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "3e3ed3099b90f481aa88e85d692b67a3", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
+                        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "ac53a5c8d669a155fca7c70733ff77c1", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
                     }
-                else:
-                    if "2" in data["panels"]:
-                        data["panels"]["2"]["url"] = "https://wowsmmpanel.com/api/v2"
-                        data["panels"]["2"]["key"] = "3e3ed3099b90f481aa88e85d692b67a3"
 
                 if "coupons" not in data: data["coupons"] = {}
                 if "mails" not in data: data["mails"] = {"1": {}, "2": {}}
@@ -55,7 +54,7 @@ def load_db():
     
     default_panels = {
         "1": {"name": "P1", "color": "#00f3ff", "url": "https://xmediasmm.in/api/v2", "key": "52bf994ea9b8fd9c173ace0f0080285e", "bot": "8291687285:AAFDWBGzzaKtQsoGa5ipaYt-dYCpUs7W2aU", "chat": "7044754988"},
-        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "3e3ed3099b90f481aa88e85d692b67a3", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
+        "2": {"name": "P2", "color": "#ff1493", "url": "https://wowsmmpanel.com/api/v2", "key": "ac53a5c8d669a155fca7c70733ff77c1", "bot": "8611984647:AAEvQQy_Vcz9P3s2Zj0Zq7fn2sMxryk1nuA", "chat": "7044754988"}
     }
     return {
         "panels": default_panels, "users": {"1": {}, "2": {}}, "balances": {"1": {}, "2": {}}, 
@@ -143,7 +142,7 @@ def poll_telegram(p_id):
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"👑 Welcome Admin! Connected to {db['panels'][p_id]['name']}.", "reply_markup": markup})
                         
                         elif msg_text == '/help_commands':
-                            txt = "🛠️ *VIP COMMANDS*\n\n`/users` - List users\n`/appinfo` - App stats\n`/setqr <url>` - Set QR\n`/discount <email> <percent>`\n`/broadcast <msg>`\n`/reply <email> <msg>`\n\n*NEW SUPER COMMANDS:*\n`/changename <New_Name>` - Update App Name Globally\n`/logsystem 1` - Panel first, then Login\n`/logsystem 2` - Login first, then Panel\n`/autosystem on` - Auto-Approve API Keys\n`/autosystem off` - Manual Approve\n`/addpanel <id> <name> <color> <url> <key> <bot> <chat>`\n`/removepanel <id>`"
+                            txt = "🛠️ *VIP COMMANDS*\n\n`/users` - List users\n`/appinfo` - App stats\n`/setqr <url>` - Set QR\n`/discount <email> <percent>`\n`/discountall <time> <unit> <percent> <reason>`\n`/broadcast <msg>`\n`/reply <email> <msg>`\n\n*NEW SUPER COMMANDS:*\n`/changename <New_Name>`\n`/logsystem 1` or `/logsystem 2`\n`/autosystem on` or `/autosystem off`\n`/addcoupon <code> <amount>`\n`/changepanel <url> <key>`\n`/addpanel <id> <name> <color> <url> <key> <bot> <chat>`\n`/removepanel <id>`\n`/setig <url>`, `/setyt <url>`, `/setwp <url>`, `/settg <url>`\n`/mailtheme <1/2/3>`\n`/api_approve <email>`, `/api_reject <email>`"
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": txt, "parse_mode": "Markdown"})
 
                         elif msg_text.startswith('/changename '):
@@ -309,7 +308,7 @@ def poll_telegram(p_id):
                             found = False
                             for u, details in db['users'][p_id].items():
                                 if details['email'] == em:
-                                    details['api_key'] = 'API_' + em.split('@')[0].upper()[:10] + str(time.time()).replace('.','')[-5:]
+                                    details['api_key'] = generate_api_key()
                                     details['api_req_pending'] = False
                                     found = True
                                     if em not in db['mails'][p_id]: db['mails'][p_id][em] = []
@@ -354,7 +353,7 @@ def poll_telegram(p_id):
                             target_email = data.replace("apiapp_", "")
                             for u, details in db['users'][p_id].items():
                                 if details['email'] == target_email:
-                                    details['api_key'] = 'API_' + target_email.split('@')[0].upper()[:10] + str(time.time()).replace('.','')[-5:]
+                                    details['api_key'] = generate_api_key()
                                     details['api_req_pending'] = False
                                     if target_email not in db['mails'][p_id]: db['mails'][p_id][target_email] = []
                                     db['mails'][p_id][target_email].append({"from": "admin", "msg": "✅ Your API Key Request has been APPROVED! Check Settings.", "read": False})
@@ -619,7 +618,7 @@ def req_api():
     for u, details in db['users'][p_id].items():
         if details['email'] == email:
             if db['config'].get('auto_system', False):
-                details['api_key'] = 'API_' + email.split('@')[0].upper()[:10] + str(time.time()).replace('.','')[-5:]
+                details['api_key'] = generate_api_key()
                 details['api_req_pending'] = False
                 if email not in db['mails'][p_id]: db['mails'][p_id][email] = []
                 db['mails'][p_id][email].append({"from": "admin", "msg": "✅ Your API Key Request has been AUTO-APPROVED! Check Settings.", "read": False})
@@ -900,4 +899,3 @@ def smm_api():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
-
