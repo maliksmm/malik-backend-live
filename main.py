@@ -19,7 +19,7 @@ try:
         db_collection = mongo_db["database"]
         USE_MONGO = True
 except Exception:
-    USE_MONGO = False
+    pass
 
 DB_FILE = "malik_db.json"
 
@@ -31,8 +31,11 @@ def load_db():
     if USE_MONGO:
         try:
             doc = db_collection.find_one({"_id": "core_db"})
-            if doc and "data" in doc:
-                data = doc["data"]
+            if doc:
+                if "data_json" in doc:
+                    data = json.loads(doc["data_json"])
+                elif "data" in doc:
+                    data = doc["data"]
         except Exception: 
             pass
 
@@ -43,7 +46,7 @@ def load_db():
         except Exception: 
             pass
 
-    if data is not None:
+    if data is not None and isinstance(data, dict):
         try:
             if "panels" not in data:
                 data["panels"] = {
@@ -56,12 +59,12 @@ def load_db():
                     data["panels"]["2"]["key"] = "ac53a5c8d669a155fca7c70733ff77c1"
 
             if "coupons" not in data: data["coupons"] = {}
-            if "mails" not in data: data["mails"] = {}
-            if "users" not in data: data["users"] = {}
-            if "balances" not in data: data["balances"] = {}
-            if "blocked" not in data: data["blocked"] = {}
-            if "orders" not in data: data["orders"] = []
+            if "mails" not in data: data["mails"] = {"1": {}, "2": {}}
+            if "users" not in data: data["users"] = {"1": {}, "2": {}}
+            if "balances" not in data: data["balances"] = {"1": {}, "2": {}}
+            if "blocked" not in data: data["blocked"] = {"1": {}, "2": {}}
             if "txns" not in data: data["txns"] = []
+            if "orders" not in data: data["orders"] = []
 
             if "config" not in data: 
                 data["config"] = {
@@ -79,9 +82,12 @@ def load_db():
                 if "log_system" not in data["config"]: data["config"]["log_system"] = "1"
                 if "auto_system" not in data["config"]: data["config"]["auto_system"] = False
                 if "admins" not in data["config"]: data["config"]["admins"] = ["7044754988"]
+                if "socials" not in data["config"]: data["config"]["socials"] = {"tg": "https://t.me/zr3v_x", "yt": "https://youtube.com/@z3rv_x?si=ayQnR40t-521AFTb", "ig": "", "wp": ""}
 
             if "discounts" not in data: data["discounts"] = {"users": {}, "all": {}}
-            
+            if "users" not in data["discounts"]: data["discounts"]["users"] = {}
+            if "all" not in data["discounts"]: data["discounts"]["all"] = {}
+
             for p_id in data["panels"]:
                 if p_id not in data["users"]: data["users"][p_id] = {}
                 if p_id not in data["balances"]: data["balances"][p_id] = {}
@@ -116,40 +122,46 @@ def load_db():
 
 db = load_db()
 active_bots = {}
-bot_lock = threading.Lock()
 
 def save_db():
     if USE_MONGO:
         try:
-            db_collection.update_one({"_id": "core_db"}, {"$set": {"data": db}}, upsert=True)
-        except Exception: pass
+            db_json = json.dumps(db)
+            db_collection.update_one({"_id": "core_db"}, {"$set": {"data_json": db_json}}, upsert=True)
+        except Exception: 
+            pass
     try:
         with open(DB_FILE, "w") as f: 
-            json.dump(db, f, indent=2)
-    except Exception: pass
+            json.dump(db, f)
+    except Exception: 
+        pass
 
 def keep_awake():
     while True:
         time.sleep(120)
-        try: requests.get("https://malik-proxy-smm.onrender.com/api/ping", timeout=5)
-        except Exception: pass
+        try: 
+            requests.get("https://malik-proxy-smm.onrender.com/api/ping", timeout=5)
+        except Exception: 
+            pass
+
 threading.Thread(target=keep_awake, daemon=True).start()
 
 @app.route("/api/ping", methods=["GET"])
-def ping(): return "Alive"
+def ping(): 
+    return "Alive"
 
 def background_order_sync():
     while True:
         time.sleep(15)
         for p_id, p_data in list(db['panels'].items()):
-            pending_orders = [o for o in db.get('orders', []) if o.get('panel') == p_id and str(o.get('status', '')).lower() not in ['completed', 'canceled', 'cancelled', 'partial']]
+            pending_orders = [o for o in db['orders'] if o['panel'] == p_id and o['status'].lower() not in ['completed', 'canceled', 'cancelled', 'partial']]
             if pending_orders:
                 order_ids = ",".join([str(o['id']) for o in pending_orders])
                 try:
                     res = requests.post(p_data["url"], data={"key": p_data["key"], "action": "status", "orders": order_ids}, timeout=10).json()
                     for o in pending_orders:
                         oid = str(o['id'])
-                        if oid in res and type(res[oid]) == dict:
+                        if oid in res and isinstance(res[oid], dict):
                             real_status = res[oid].get("status", o['status'])
                             if real_status.lower() != o['status'].lower():
                                 if real_status.lower() in ['completed', 'canceled', 'cancelled', 'partial']:
@@ -158,48 +170,36 @@ def background_order_sync():
                                     requests.post(f"https://api.telegram.org/bot{p_data['bot']}/sendMessage", json={"chat_id": p_data['chat'], "text": msg})
                                     
                                     o['status'] = real_status
-                                    if real_status.lower() in ['canceled', 'cancelled'] and not o.get('refunded', False):
+                                    if real_status.lower() in ['canceled', 'cancelled'] and not o['refunded']:
                                         db['balances'][p_id][o['email']] = db['balances'][p_id].get(o['email'], 0.0) + o['charge']
                                         o['refunded'] = True
-                                    elif real_status.lower() == 'partial' and not o.get('refunded', False):
+                                    elif real_status.lower() == 'partial' and not o['refunded']:
                                         remains = float(res[oid].get("remains", 0))
-                                        if remains > 0 and float(o.get('qty', 1)) > 0:
+                                        if remains > 0:
                                             refund_amt = (remains / float(o['qty'])) * o['charge']
                                             db['balances'][p_id][o['email']] = db['balances'][p_id].get(o['email'], 0.0) + refund_amt
                                         o['refunded'] = True
                                     save_db()
-                except Exception: pass
+                except Exception: 
+                    pass
 
 threading.Thread(target=background_order_sync, daemon=True).start()
 
 def poll_telegram(p_id):
+    if p_id not in db['panels']: return
+    bot_token = db['panels'][p_id]["bot"]
     offset = 0
-    while True:
-        with bot_lock:
-            if p_id not in db['panels']:
-                active_bots.pop(p_id, None)
-                break
-            bot_token = db['panels'][p_id].get("bot")
-
-        if not bot_token:
-            time.sleep(5)
-            continue
-
+    while p_id in db['panels']:
         try:
-            res = requests.get(f"https://api.telegram.org/bot{bot_token}/getUpdates?offset={offset}&timeout=5", timeout=10).json()
-            if not res.get('ok'):
-                time.sleep(3)
-                continue
-
+            res = requests.get(f"https://api.telegram.org/bot{bot_token}/getUpdates?offset={offset}&timeout=10", timeout=15).json()
             for update in res.get('result', []):
                 offset = update['update_id'] + 1
                 
                 if 'message' in update and 'text' in update['message']:
-                    msg_text = update['message']['text'].strip()
+                    msg_text = update['message']['text']
                     chat_id = str(update['message']['chat']['id'])
                     
-                    admins = db['config'].get('admins', ["7044754988"])
-                    if chat_id not in admins:
+                    if chat_id not in db['config'].get('admins', ["7044754988"]):
                         continue
                     
                     try:
@@ -311,17 +311,13 @@ def poll_telegram(p_id):
                             save_db(); requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "✅ Mail Theme Updated"})
 
                         elif msg_text == '/appinfo':
-                            total_u = len(db['users'].get(p_id, {}))
-                            total_bal = sum(db['balances'].get(p_id, {}).values())
+                            total_u = len(db['users'][p_id])
+                            total_bal = sum(db['balances'][p_id].values())
                             txt = f"📊 *APP STATS ({db['panels'][p_id]['name']})*\n\n👥 Total Users: {total_u}\n💰 Total Balances: ₹{total_bal:.2f}"
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": txt, "parse_mode": "Markdown"})
 
                         elif msg_text == '/users':
-                            total_users = len(db['users'].get(p_id, {}))
+                            total_users = len(db['users'][p_id])
                             if total_users == 0:
                                 requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "⚠️ No users found."})
-                            else:
-                                keys = []
-                                for u_name, u_details in db['users'][p_id].items():
-                                    em = u_details['email']
  
