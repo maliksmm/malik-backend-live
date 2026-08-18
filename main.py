@@ -18,7 +18,7 @@ try:
         mongo_db = client["malik_smm_pro"]
         db_collection = mongo_db["database"]
         USE_MONGO = True
-except Exception:
+except:
     pass
 
 DB_FILE = "malik_db.json"
@@ -31,22 +31,17 @@ def load_db():
     if USE_MONGO:
         try:
             doc = db_collection.find_one({"_id": "core_db"})
-            if doc:
-                if "data_json" in doc:
-                    data = json.loads(doc["data_json"])
-                elif "data" in doc:
-                    data = doc["data"]
-        except Exception: 
-            pass
+            if doc and "data" in doc:
+                data = doc["data"]
+        except: pass
 
     if data is None and os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r") as f:
                 data = json.load(f)
-        except Exception: 
-            pass
+        except: pass
 
-    if data is not None and isinstance(data, dict):
+    if data is not None:
         try:
             if "panels" not in data:
                 data["panels"] = {
@@ -60,12 +55,6 @@ def load_db():
 
             if "coupons" not in data: data["coupons"] = {}
             if "mails" not in data: data["mails"] = {"1": {}, "2": {}}
-            if "users" not in data: data["users"] = {"1": {}, "2": {}}
-            if "balances" not in data: data["balances"] = {"1": {}, "2": {}}
-            if "blocked" not in data: data["blocked"] = {"1": {}, "2": {}}
-            if "txns" not in data: data["txns"] = []
-            if "orders" not in data: data["orders"] = []
-
             if "config" not in data: 
                 data["config"] = {
                     "qr_1": "./AccountQRCodeJ&K Bank - 6648_DARK_THEME (13).png", 
@@ -75,19 +64,18 @@ def load_db():
                     "app_name": "MALIK PROXY SMM",
                     "log_system": "1",
                     "auto_system": False,
-                    "admins": ["7044754988"]
+                    "admins": ["7044754988"],
+                    "owner": "7044754988"
                 }
             else:
                 if "app_name" not in data["config"]: data["config"]["app_name"] = "MALIK PROXY SMM"
                 if "log_system" not in data["config"]: data["config"]["log_system"] = "1"
                 if "auto_system" not in data["config"]: data["config"]["auto_system"] = False
                 if "admins" not in data["config"]: data["config"]["admins"] = ["7044754988"]
-                if "socials" not in data["config"]: data["config"]["socials"] = {"tg": "https://t.me/zr3v_x", "yt": "https://youtube.com/@z3rv_x?si=ayQnR40t-521AFTb", "ig": "", "wp": ""}
+                data["config"]["owner"] = "7044754988"
 
             if "discounts" not in data: data["discounts"] = {"users": {}, "all": {}}
-            if "users" not in data["discounts"]: data["discounts"]["users"] = {}
-            if "all" not in data["discounts"]: data["discounts"]["all"] = {}
-
+            
             for p_id in data["panels"]:
                 if p_id not in data["users"]: data["users"][p_id] = {}
                 if p_id not in data["balances"]: data["balances"][p_id] = {}
@@ -96,7 +84,7 @@ def load_db():
                 if p_id not in data["discounts"]["users"]: data["discounts"]["users"][p_id] = {}
                 if p_id not in data["discounts"]["all"]: data["discounts"]["all"][p_id] = {"percent": 0, "exp": 0}
             return data
-        except Exception: 
+        except Exception as e: 
             pass
             
     default_panels = {
@@ -115,7 +103,8 @@ def load_db():
             "app_name": "MALIK PROXY SMM",
             "log_system": "1",
             "auto_system": False,
-            "admins": ["7044754988"]
+            "admins": ["7044754988"],
+            "owner": "7044754988"
         },
         "discounts": {"users": {"1": {}, "2": {}}, "all": {"1": {"percent": 0, "exp": 0}, "2": {"percent": 0, "exp": 0}}}
     }
@@ -126,29 +115,21 @@ active_bots = {}
 def save_db():
     if USE_MONGO:
         try:
-            db_json = json.dumps(db)
-            db_collection.update_one({"_id": "core_db"}, {"$set": {"data_json": db_json}}, upsert=True)
-        except Exception: 
-            pass
+            db_collection.update_one({"_id": "core_db"}, {"$set": {"data": db}}, upsert=True)
+        except: pass
     try:
-        with open(DB_FILE, "w") as f: 
-            json.dump(db, f)
-    except Exception: 
-        pass
+        with open(DB_FILE, "w") as f: json.dump(db, f)
+    except: pass
 
 def keep_awake():
     while True:
         time.sleep(120)
-        try: 
-            requests.get("https://malik-proxy-smm.onrender.com/api/ping", timeout=5)
-        except Exception: 
-            pass
-
+        try: requests.get("https://malik-proxy-smm.onrender.com/api/ping", timeout=5)
+        except: pass
 threading.Thread(target=keep_awake, daemon=True).start()
 
 @app.route("/api/ping", methods=["GET"])
-def ping(): 
-    return "Alive"
+def ping(): return "Alive"
 
 def background_order_sync():
     while True:
@@ -161,7 +142,7 @@ def background_order_sync():
                     res = requests.post(p_data["url"], data={"key": p_data["key"], "action": "status", "orders": order_ids}, timeout=10).json()
                     for o in pending_orders:
                         oid = str(o['id'])
-                        if oid in res and isinstance(res[oid], dict):
+                        if oid in res and type(res[oid]) == dict:
                             real_status = res[oid].get("status", o['status'])
                             if real_status.lower() != o['status'].lower():
                                 if real_status.lower() in ['completed', 'canceled', 'cancelled', 'partial']:
@@ -180,10 +161,15 @@ def background_order_sync():
                                             db['balances'][p_id][o['email']] = db['balances'][p_id].get(o['email'], 0.0) + refund_amt
                                         o['refunded'] = True
                                     save_db()
-                except Exception: 
-                    pass
+                except: pass
 
 threading.Thread(target=background_order_sync, daemon=True).start()
+
+def is_owner(chat_id):
+    return str(chat_id) == "7044754988" or str(chat_id) == str(db["config"].get("owner", "7044754988"))
+
+def is_admin(chat_id):
+    return is_owner(chat_id) or str(chat_id) in db['config'].get('admins', ["7044754988"])
 
 def poll_telegram(p_id):
     if p_id not in db['panels']: return
@@ -195,11 +181,45 @@ def poll_telegram(p_id):
             for update in res.get('result', []):
                 offset = update['update_id'] + 1
                 
-                if 'message' in update and 'text' in update['message']:
+                # Callback Query Handler for Buttons
+                if 'callback_query' in update:
+                    cb = update['callback_query']
+                    cb_id = cb['id']
+                    cb_data = cb.get('data', '')
+                    from_id = str(cb['from']['id'])
+                    
+                    if not is_admin(from_id):
+                        requests.post(f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery", json={"callback_query_id": cb_id, "text": "❌ Unauthorized Admin!"})
+                        continue
+                        
+                    if cb_data.startswith("app_"):
+                        utr = cb_data.replace("app_", "")
+                        for t in db["txns"]:
+                            if t["utr"] == utr and t["status"] == "Pending":
+                                t["status"] = "Approved"
+                                u_email = t["email"]
+                                t_panel = t["panel"]
+                                amt = float(t["amount"])
+                                db["balances"][t_panel][u_email] = db["balances"][t_panel].get(u_email, 0.0) + amt
+                                save_db()
+                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": cb["message"]["chat"]["id"], "text": f"✅ Payment UTR <code>{utr}</code> Approved! ₹{amt} added.", "parse_mode": "HTML"})
+                                break
+                    elif cb_data.startswith("rej_"):
+                        utr = cb_data.replace("rej_", "")
+                        for t in db["txns"]:
+                            if t["utr"] == utr and t["status"] == "Pending":
+                                t["status"] = "Rejected"
+                                save_db()
+                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": cb["message"]["chat"]["id"], "text": f"❌ Payment UTR <code>{utr}</code> Rejected!", "parse_mode": "HTML"})
+                                break
+                    requests.post(f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery", json={"callback_query_id": cb_id, "text": "Done!"})
+
+                # Text Message Commands Handler
+                elif 'message' in update and 'text' in update['message']:
                     msg_text = update['message']['text']
                     chat_id = str(update['message']['chat']['id'])
                     
-                    if chat_id not in db['config'].get('admins', ["7044754988"]):
+                    if not is_admin(chat_id):
                         continue
                     
                     try:
@@ -210,8 +230,8 @@ def poll_telegram(p_id):
                         elif msg_text == '/help_commands':
                             txt = "🛠️ *VIP COMMANDS*\n\n`/users` - List users\n`/appinfo` - App stats\n`/setqr <url>` - Set QR\n`/discount <email> <percent>`\n`/discountall <time> <unit> <percent> <reason>`\n`/broadcast <msg>`\n`/reply <email> <msg>`\n\n*NEW SUPER COMMANDS:*\n`/changename <New_Name>`\n`/logsystem 1` or `/logsystem 2`\n`/autosystem on` or `/autosystem off`\n`/addcoupon <code> <amount>`\n`/changepanel <url> <key>`\n`/addpanel <id> <name> <color> <url> <key> <bot> <chat>`\n`/removepanel <id>`\n`/setig <url>`, `/setyt <url>`, `/setwp <url>`, `/settg <url>`\n`/mailtheme <1/2/3>`\n`/api_approve <email>`, `/api_reject <email>`\n`/addadmin <chat_id>`, `/removeadmin <chat_id>`"
                             requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": txt, "parse_mode": "Markdown"})
-
-                        elif msg_text.startswith('/addadmin '):
+                            
+                        elif msg_text.startswith('/addadmin ') and is_owner(chat_id):
                             new_admin = msg_text.replace('/addadmin ', '').strip()
                             if new_admin not in db['config']['admins']:
                                 db['config']['admins'].append(new_admin)
@@ -219,105 +239,98 @@ def poll_telegram(p_id):
                                 requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Admin {new_admin} added successfully!"})
                             else:
                                 requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"⚠️ Admin {new_admin} already exists!"})
-
-                        elif msg_text.startswith('/removeadmin '):
+                                
+                        elif msg_text.startswith('/removeadmin ') and is_owner(chat_id):
                             rem_admin = msg_text.replace('/removeadmin ', '').strip()
-                            if rem_admin in db['config']['admins'] and len(db['config']['admins']) > 1:
+                            if rem_admin == "7044754988":
+                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ OWNER CANNOT BE REMOVED!"})
+                            elif rem_admin in db['config']['admins']:
                                 db['config']['admins'].remove(rem_admin)
                                 save_db()
-                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Admin {rem_admin} removed!"})
-                            else:
-                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"⚠️ Cannot remove. Admin not found or it's the only admin left!"})
-
-                        elif msg_text.startswith('/changename '):
-                            new_name = msg_text.replace('/changename ', '').strip()
-                            db['config']['app_name'] = new_name
-                            save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ App Name changed globally to: {new_name}"})
-
-                        elif msg_text == '/autosystem on':
-                            db['config']['auto_system'] = True
-                            save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"⚡ Auto-System is now ON. API Requests will be auto-approved."})
-
-                        elif msg_text == '/autosystem off':
-                            db['config']['auto_system'] = False
-                            save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"🛑 Auto-System is now OFF. Manual approval required."})
-
-                        elif msg_text in ['/logsystem 1', '/logsystem 2']:
-                            sys_num = msg_text.split(' ')[1]
-                            db['config']['log_system'] = sys_num
-                            save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Login System changed to Type {sys_num}!"})
-
-                        elif msg_text.startswith('/addcoupon '):
-                            parts = msg_text.split(' ')
-                            code = parts[1].strip().upper()
-                            amt = float(parts[2])
-                            db['coupons'][code] = amt
-                            save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Coupon {code} created for ₹{amt}!"})
-
-                        elif msg_text.startswith('/changepanel '):
-                            parts = msg_text.split(' ')
-                            new_url = parts[1].strip()
-                            new_key = parts[2].strip()
-                            db['panels'][p_id]['url'] = new_url
-                            db['panels'][p_id]['key'] = new_key
-                            save_db()
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Connected Panel API updated successfully!"})
-
-                        elif msg_text.startswith('/addpanel '):
-                            parts = msg_text.split(' ')
-                            nid = parts[1].strip()
-                            db['panels'][nid] = {
-                                "name": parts[2].strip(), "color": parts[3].strip(), 
-                                "url": parts[4].strip(), "key": parts[5].strip(), 
-                                "bot": parts[6].strip(), "chat": parts[7].strip()
-                            }
-                            if nid not in db["users"]: db["users"][nid] = {}
-                            if nid not in db["balances"]: db["balances"][nid] = {}
-                            if nid not in db["blocked"]: db["blocked"][nid] = []
-                            if nid not in db["mails"]: db["mails"][nid] = {}
-                            if nid not in db["discounts"]["users"]: db["discounts"]["users"][nid] = {}
-                            if nid not in db["discounts"]["all"]: db["discounts"]["all"][nid] = {"percent": 0, "exp": 0}
-                            save_db()
-                            start_polling_for_panel(nid)
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Panel {nid} added successfully!"})
-
-                        elif msg_text.startswith('/removepanel '):
-                            nid = msg_text.split(' ')[1].strip()
-                            if nid in db['panels']:
-                                del db['panels'][nid]
-                                save_db()
-                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Panel {nid} removed!"})
-
-                        elif msg_text.startswith('/setig '):
-                            db['config']['socials']['ig'] = msg_text.replace('/setig ', '').strip()
-                            save_db(); requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "✅ IG Link Updated"})
-                        elif msg_text.startswith('/setyt '):
-                            db['config']['socials']['yt'] = msg_text.replace('/setyt ', '').strip()
-                            save_db(); requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "✅ YT Link Updated"})
-                        elif msg_text.startswith('/settg '):
-                            db['config']['socials']['tg'] = msg_text.replace('/settg ', '').strip()
-                            save_db(); requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "✅ TG Link Updated"})
-                        elif msg_text.startswith('/setwp '):
-                            db['config']['socials']['wp'] = msg_text.replace('/setwp ', '').strip()
-                            save_db(); requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "✅ WP Link Updated"})
-                        
-                        elif msg_text.startswith('/mailtheme '):
-                            db['config']['mail_theme'] = msg_text.replace('/mailtheme ', '').strip()
-                            save_db(); requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "✅ Mail Theme Updated"})
-
-                        elif msg_text == '/appinfo':
-                            total_u = len(db['users'][p_id])
-                            total_bal = sum(db['balances'][p_id].values())
-                            txt = f"📊 *APP STATS ({db['panels'][p_id]['name']})*\n\n👥 Total Users: {total_u}\n💰 Total Balances: ₹{total_bal:.2f}"
-                            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": txt, "parse_mode": "Markdown"})
+                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Admin {rem_admin} removed successfully!"})
 
                         elif msg_text == '/users':
-                            total_users = len(db['users'][p_id])
-                            if total_users == 0:
-                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "⚠️ No users found."})
- 
+                            p_users = db['users'].get(p_id, {})
+                            if not p_users:
+                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"👤 No users registered in {db['panels'][p_id]['name']}."})
+                            else:
+                                txt = f"👥 <b>USERS LIST ({db['panels'][p_id]['name']})</b>\n\n"
+                                for em, info in p_users.items():
+                                    bal = db['balances'].get(p_id, {}).get(em, 0.0)
+                                    status = "🔴 Blocked" if em in db['blocked'].get(p_id, []) else "🟢 Active"
+                                    txt += f"📧 {em}\n👤 Username: {info.get('username','N/A')}\n💰 Balance: ₹{bal:.2f}\n🔑 API Key: <code>{info.get('api_key','N/A')}</code>\n⚡ Status: {status}\n--------------------\n"
+                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": txt, "parse_mode": "HTML"})
+
+                        elif msg_text.startswith('/addpanel '):
+                            parts = msg_text.split(maxsplit=7)
+                            if len(parts) >= 8:
+                                n_id, n_name, n_color, n_url, n_key, n_bot, n_chat = parts[1], parts[2], parts[3], parts[4], parts[5], parts[6], parts[7]
+                                db['panels'][n_id] = {"name": n_name, "color": n_color, "url": n_url, "key": n_key, "bot": n_bot, "chat": n_chat}
+                                for k in ["users", "balances", "blocked", "mails"]:
+                                    if n_id not in db[k]: db[k][n_id] = {} if k != "blocked" else []
+                                save_db()
+                                start_bot_threads()
+                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Panel {n_id} ({n_name}) added successfully!"})
+
+                        elif msg_text.startswith('/removepanel '):
+                            r_id = msg_text.replace('/removepanel ', '').strip()
+                            if r_id in db['panels'] and len(db['panels']) > 1:
+                                del db['panels'][r_id]
+                                save_db()
+                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": f"✅ Panel {r_id} removed successfully!"})
+                            else:
+                                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": "❌ Cannot remove main panel!"})
+
+                    except Exception as e: pass
+        except Exception as e:
+            time.sleep(3)
+
+def start_bot_threads():
+    for p_id in list(db.get('panels', {}).keys()):
+        if p_id not in active_bots:
+            t = threading.Thread(target=poll_telegram, args=(p_id,), daemon=True)
+            t.start()
+            active_bots[p_id] = t
+
+start_bot_threads()
+
+# Server API Endpoints
+@app.route('/api/init-app', methods=['GET'])
+def init_app():
+    panels_list = [{"id": k, "name": v["name"], "color": v["color"]} for k, v in db["panels"].items()]
+    return jsonify({"panels": panels_list, "config": db["config"]})
+
+@app.route('/api/add-funds', methods=['POST'])
+def add_funds():
+    data = request.json or {}
+    p_id = str(data.get("panel") or "1")
+    email = (data.get("email") or "").lower().strip()
+    amt = data.get("amount")
+    utr = str(data.get("utr") or "").strip()
+    
+    if not amt or not utr: return jsonify({"error": "Invalid Details"}), 400
+        
+    txn = {"panel": p_id, "email": email, "amount": amt, "utr": utr, "status": "Pending"}
+    db["txns"].append(txn)
+    save_db()
+    
+    bot_token = db["panels"].get(p_id, {}).get("bot")
+    admin_chat = db["panels"].get(p_id, {}).get("chat", "7044754988")
+    if bot_token and admin_chat:
+        markup = {
+            "inline_keyboard": [[
+                {"text": "✅ Approve", "callback_data": f"app_{utr}"},
+                {"text": "❌ Reject", "callback_data": f"rej_{utr}"}
+            ]]
+        }
+        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
+            "chat_id": admin_chat, 
+            "text": f"💰 <b>NEW PAYMENT REQUEST</b>\n\nPanel: {p_id}\nUser: {email}\nAmount: ₹{amt}\nUTR: <code>{utr}</code>", 
+            "parse_mode": "HTML",
+            "reply_markup": markup
+        })
+        
+    return jsonify({"success": True})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
